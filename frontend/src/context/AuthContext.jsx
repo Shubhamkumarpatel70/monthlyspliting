@@ -33,10 +33,10 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signup = async (name, email, password, mobile) => {
-    const data = await authApi.signup(name, email, password, mobile);
+  const signup = async (name, email, password, mobile, otpCode, otpType) => {
+    const data = await authApi.signup(name, email, password, mobile, otpCode, otpType);
     localStorage.setItem('token', data.token);
-    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile });
+    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile, emailVerified: data.emailVerified });
     return data;
   };
 

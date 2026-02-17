@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { auth as authApi } from '../api';
+import OTPVerification from '../components/OTPVerification';
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -14,6 +16,10 @@ export default function Signup() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showOTP, setShowOTP] = useState(false);
+  const [sendingOTP, setSendingOTP] = useState(false);
+  const [otpType, setOtpType] = useState('mobile'); // 'email' or 'mobile'
+  const [whatsappLink, setWhatsappLink] = useState('');
 
   useEffect(() => {
     if (mobileParam) setMobile(mobileParam);
@@ -22,16 +28,94 @@ export default function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    
+    // Validate form
+    if (!name?.trim() || !email?.trim() || !password) {
+      setError('Please fill in all required fields');
+      return;
+    }
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    // Determine OTP type based on mobile availability
+    const mobileTrim = mobile.trim();
+    const useMobileOTP = mobileTrim && mobileTrim.length >= 10;
+    const selectedOtpType = useMobileOTP ? 'mobile' : 'email';
+    setOtpType(selectedOtpType);
+
+    // Send OTP first
+    setSendingOTP(true);
+    try {
+      if (selectedOtpType === 'mobile') {
+        const result = await authApi.sendOTP(null, mobileTrim, 'signup', 'mobile');
+        // Store WhatsApp link if provided
+        if (result.whatsappLink) {
+          setWhatsappLink(result.whatsappLink);
+        }
+      } else {
+        await authApi.sendOTP(email.trim(), null, 'signup', 'email');
+      }
+      setShowOTP(true);
+    } catch (err) {
+      setError(err.message || 'Failed to send verification code');
+    } finally {
+      setSendingOTP(false);
+    }
+  };
+
+  const handleOTPVerified = async (otpCode) => {
+    setError('');
     setLoading(true);
     try {
-      await signup(name, email, password, mobile.trim() || undefined);
+      await signup(name, email, password, mobile.trim() || undefined, otpCode, otpType);
       navigate(returnUrl || '/dashboard', { replace: true });
     } catch (err) {
       setError(err.message || 'Signup failed');
+      setShowOTP(false); // Go back to form on error
     } finally {
       setLoading(false);
     }
   };
+
+  const handleCancelOTP = () => {
+    setShowOTP(false);
+    setError('');
+  };
+
+  if (showOTP) {
+    return (
+      <div className="min-h-screen bg-darkBg flex flex-col items-center justify-center p-4 safe-area-inset">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="w-14 h-14 mx-auto rounded-xl bg-surface border border-primary/30 flex items-center justify-center mb-4">
+              <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-textPrimary">Verify your email</h1>
+            <p className="text-textSecondary text-sm mt-1">Check your inbox for the code</p>
+          </div>
+          {error && (
+            <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">
+              {error}
+            </div>
+          )}
+          <OTPVerification
+            email={email.trim()}
+            mobile={mobile.trim()}
+            purpose="signup"
+            type={otpType}
+            whatsappLink={whatsappLink}
+            onVerified={handleOTPVerified}
+            onCancel={handleCancelOTP}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-darkBg flex flex-col items-center justify-center p-4 safe-area-inset">
@@ -57,6 +141,7 @@ export default function Signup() {
             className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary mb-4"
             placeholder="Your name"
             required
+            disabled={sendingOTP}
           />
           <label className="block text-sm font-medium text-textSecondary mb-1">Email</label>
           <input
@@ -66,6 +151,7 @@ export default function Signup() {
             className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary mb-4"
             placeholder="you@example.com"
             required
+            disabled={sendingOTP}
           />
           <label className="block text-sm font-medium text-textSecondary mb-1">
             Mobile number {returnUrl?.includes('/join/') ? '(required to join group)' : '(optional)'}
@@ -78,6 +164,7 @@ export default function Signup() {
             placeholder="10-digit mobile"
             maxLength={15}
             required={!!returnUrl?.includes('/join/')}
+            disabled={sendingOTP}
           />
           <label className="block text-sm font-medium text-textSecondary mb-1">Password (min 6)</label>
           <input
@@ -88,13 +175,14 @@ export default function Signup() {
             placeholder="••••••••"
             required
             minLength={6}
+            disabled={sendingOTP}
           />
           <button
             type="submit"
-            disabled={loading}
+            disabled={sendingOTP || loading}
             className="w-full py-3 rounded-lg bg-primary text-darkBg font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-darkBg disabled:opacity-50 transition"
           >
-            {loading ? 'Creating account…' : 'Sign up'}
+            {sendingOTP ? 'Sending verification code…' : loading ? 'Creating account…' : 'Continue'}
           </button>
         </form>
         <p className="text-center text-textSecondary text-sm mt-6">

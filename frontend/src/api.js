@@ -16,11 +16,14 @@ export async function request(path, options = {}) {
 }
 
 export const auth = {
-  signup: (name, email, password, mobile) => request('/auth/signup', { method: 'POST', body: JSON.stringify({ name, email, password, mobile }) }),
+  signup: (name, email, password, mobile, otpCode, otpType) => request('/auth/signup', { method: 'POST', body: JSON.stringify({ name, email, password, mobile, otpCode, otpType }) }),
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   loginMobile: (mobile, password) => request('/auth/login-mobile', { method: 'POST', body: JSON.stringify({ mobile, password }) }),
   checkMobile: (mobile) => request(`/auth/check-mobile/${encodeURIComponent(mobile)}`),
   me: () => request('/auth/me'),
+  sendOTP: (email, mobile, purpose, type) => request('/auth/send-otp', { method: 'POST', body: JSON.stringify({ email, mobile, purpose, type }) }),
+  verifyOTP: (email, mobile, code, purpose, type) => request('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, mobile, code, purpose, type }) }),
+  resendOTP: (email, mobile, purpose, type) => request('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email, mobile, purpose, type }) }),
 };
 
 export const groups = {

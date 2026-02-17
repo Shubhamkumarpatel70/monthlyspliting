@@ -32,7 +32,7 @@ export const groupMember = async (req, res, next) => {
 };
 
 export const groupAdmin = async (req, res, next) => {
-  const admin = req.group.members.find(m => m.user.toString() === req.user._id.toString());
+  const admin = req.group.members.find(m => (m.user?._id || m.user)?.toString() === req.user._id.toString());
   if (!admin || admin.role !== 'admin') {
     return res.status(403).json({ message: 'Admin only' });
   }

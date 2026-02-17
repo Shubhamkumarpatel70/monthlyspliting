@@ -105,10 +105,10 @@ router.post('/:groupId/members', groupMember, groupAdmin, async (req, res) => {
 router.delete('/:groupId/members/:userId', groupMember, groupAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const member = req.group.members.find(m => m.user.toString() === userId);
+    const member = req.group.members.find(m => (m.user?._id || m.user)?.toString() === userId);
     if (!member) return res.status(404).json({ message: 'Member not found' });
     if (member.role === 'admin') return res.status(400).json({ message: 'Cannot remove admin' });
-    req.group.members = req.group.members.filter(m => m.user.toString() !== userId);
+    req.group.members = req.group.members.filter(m => (m.user?._id || m.user)?.toString() !== userId);
     await req.group.save();
     const populated = await Group.findById(req.group._id).populate('members.user', 'name email mobile');
     res.json(populated);

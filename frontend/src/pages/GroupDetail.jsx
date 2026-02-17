@@ -246,6 +246,9 @@ export default function GroupDetail() {
     );
   }
 
+  const settlementStatus = settlement?.status ?? 'pending';
+  const canAddExpense = settlementStatus === 'pending';
+
   const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const monthOptions = [...new Set([...months, currentMonthStr])].sort().reverse();
   const displayMonth = selectedMonth ? (() => {
@@ -301,8 +304,10 @@ export default function GroupDetail() {
           </select>
           <div className="flex gap-2 flex-wrap">
             <button
-              onClick={() => setAddExpenseOpen(true)}
-              className="flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl bg-primary text-darkBg font-semibold hover:bg-primary/90 touch-manipulation"
+              onClick={() => canAddExpense && setAddExpenseOpen(true)}
+              disabled={!canAddExpense}
+              title={!canAddExpense ? 'Settlement marked as paid. Reset to pending to add expenses.' : undefined}
+              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${canAddExpense ? 'bg-primary text-darkBg hover:bg-primary/90' : 'bg-white/10 text-textSecondary cursor-not-allowed'}`}
             >
               Add expense
             </button>
@@ -496,8 +501,15 @@ export default function GroupDetail() {
 
           <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
             <h2 className="text-lg font-semibold text-textPrimary px-4 sm:px-5 py-4 border-b border-white/5">Expense ledger</h2>
+            {!canAddExpense && (
+              <p className="px-4 sm:px-5 py-3 text-warning/90 text-sm border-b border-white/5">
+                Settlement is marked as paid. Reset to pending (above) to add more expenses.
+              </p>
+            )}
             {!Array.isArray(expenses) || expenses.length === 0 ? (
-              <p className="px-4 sm:px-5 py-8 text-textSecondary text-sm">No expenses this month. Tap Add expense to record one.</p>
+              <p className="px-4 sm:px-5 py-8 text-textSecondary text-sm">
+                {canAddExpense ? 'No expenses this month. Tap Add expense to record one.' : 'No expenses this month.'}
+              </p>
             ) : (
               <ul className="divide-y divide-white/5">
                 {expenses.slice(0, 30).map((ex) => (
@@ -550,9 +562,10 @@ export default function GroupDetail() {
       {selectedMonth && (
         <button
           type="button"
-          onClick={() => setAddExpenseOpen(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 sm:hidden rounded-full bg-primary text-darkBg shadow-lg shadow-primary/30 flex items-center justify-center touch-manipulation z-30 hover:bg-primary/90 active:scale-95"
-          aria-label="Add expense"
+          onClick={() => canAddExpense && setAddExpenseOpen(true)}
+          disabled={!canAddExpense}
+          aria-label={canAddExpense ? 'Add expense' : 'Reset to pending to add expenses'}
+          className={`fixed bottom-6 right-6 w-14 h-14 sm:hidden rounded-full shadow-lg flex items-center justify-center touch-manipulation z-30 ${canAddExpense ? 'bg-primary text-darkBg shadow-primary/30 hover:bg-primary/90 active:scale-95' : 'bg-white/10 text-textSecondary cursor-not-allowed'}`}
         >
           <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
         </button>

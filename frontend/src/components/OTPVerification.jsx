@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { auth as authApi } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 export default function OTPVerification({ email, mobile, purpose = 'signup', type = 'email', whatsappLink, onVerified, onCancel }) {
+  const navigate = useNavigate();
+  const auth = useAuth();
+  const loginWithOTP = auth?.loginWithOTP;
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,6 +30,7 @@ export default function OTPVerification({ email, mobile, purpose = 'signup', typ
   }, []);
 
   // Automatically open WhatsApp when component mounts with mobile type and link
+  // Only if WhatsApp link is provided (not needed if SMS was sent automatically)
   useEffect(() => {
     if (type === 'mobile' && whatsappLink) {
       // Small delay to ensure component is rendered, then open WhatsApp
@@ -87,12 +93,38 @@ export default function OTPVerification({ email, mobile, purpose = 'signup', typ
     setError('');
     setLoading(true);
     try {
-      await authApi.verifyOTP(email, mobile, otpCode, purpose, type);
+      const result = await authApi.verifyOTP(email, mobile, otpCode, purpose, type);
+      
+      // If purpose is 'login' and we got token/user data, log them in
+      if (purpose === 'login' && result.token && result.user) {
+        if (loginWithOTP) {
+          await loginWithOTP(result.token, result.user);
+        }
+        // Navigation will be handled by the parent component or AuthContext
+        if (onVerified) {
+          onVerified(result);
+        }
+        return;
+      }
+      
+      // For signup or other purposes, call the onVerified callback
       if (onVerified) {
         onVerified(otpCode);
       }
     } catch (err) {
-      setError(err.message || 'Invalid verification code');
+      // Handle "account not found login" error - redirect to signup
+      const errorMessage = err.message || '';
+      if (errorMessage.toLowerCase().includes('account not found') || errorMessage === 'account not found login') {
+        const signupParams = new URLSearchParams();
+        if (mobile) signupParams.set('mobile', mobile);
+        if (email) signupParams.set('email', email);
+        const returnUrl = window.location.pathname + window.location.search;
+        if (returnUrl !== '/') signupParams.set('returnUrl', returnUrl);
+        navigate(`/signup?${signupParams.toString()}`, { replace: true });
+        return;
+      }
+      
+      setError(errorMessage || 'Invalid verification code');
       // Clear code on error
       setCode(['', '', '', '', '', '']);
       const firstInput = document.getElementById('otp-0');

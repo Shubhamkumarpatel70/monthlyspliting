@@ -45,6 +45,16 @@ export default function Layout({ children }) {
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 mt-1 w-48 py-1 rounded-xl bg-surface border border-white/10 shadow-xl z-20">
                   <div className="px-4 py-2 border-b border-white/5 text-textSecondary text-xs truncate">{user?.email}</div>
+                  {user?.role === 'admin' && (
+                    <Link
+                      to="/admin"
+                      className="w-full text-left px-4 py-2 text-sm text-primary hover:bg-primary/10 flex items-center gap-2"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                      Admin Panel
+                    </Link>
+                  )}
                   {isInstallable && (
                     <button
                       onClick={handleInstallApp}

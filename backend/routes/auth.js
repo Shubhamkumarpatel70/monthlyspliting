@@ -36,7 +36,6 @@ router.post('/signup', async (req, res) => {
     if (otpCode) {
       const otpQuery = {
         purpose: 'signup',
-        verified: false,
         expiresAt: { $gt: new Date() },
       };
       
@@ -46,15 +45,18 @@ router.post('/signup', async (req, res) => {
         otpQuery.email = emailLower;
       }
       
+      // Find OTP (can be verified or unverified, as long as it matches and is not expired)
       const otp = await Otp.findOne(otpQuery).sort({ createdAt: -1 });
       
       if (!otp || otp.code !== otpCode) {
         return res.status(400).json({ message: 'Invalid or expired verification code' });
       }
       
-      // Mark OTP as verified
-      otp.verified = true;
-      await otp.save();
+      // Mark OTP as verified if not already verified
+      if (!otp.verified) {
+        otp.verified = true;
+        await otp.save();
+      }
     }
     
     const existing = await User.findOne({ email: emailLower });
@@ -81,6 +83,14 @@ router.post('/signup', async (req, res) => {
       token,
     });
   } catch (err) {
+    console.error('Signup error:', err);
+    // Handle MongoDB duplicate key errors
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern || {})[0];
+      return res.status(400).json({ 
+        message: `${field === 'email' ? 'Email' : 'Mobile number'} already registered` 
+      });
+    }
     res.status(500).json({ message: err.message || 'Signup failed' });
   }
 });
@@ -100,6 +110,7 @@ router.post('/login', async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      role: user.role,
       token,
     });
   } catch (err) {
@@ -141,6 +152,7 @@ router.post('/login-mobile', async (req, res) => {
       name: user.name,
       email: user.email,
       mobile: user.mobile,
+      role: user.role,
       token,
     });
   } catch (err) {
@@ -187,7 +199,7 @@ router.post('/send-otp', async (req, res) => {
         expiresAt,
       });
       
-      // Generate WhatsApp link with OTP
+      // Send OTP via SMS/WhatsApp
       const smsResult = await sendOTPSMS(mobileTrim, code, purpose);
       
       res.json({ 
@@ -276,20 +288,47 @@ router.post('/verify-otp', async (req, res) => {
         return res.status(400).json({ message: 'Too many failed attempts. Please request a new code.' });
       }
       
-      // Verify code
+      // Verify code - if doesn't match, increment attempts and return error
       if (otp.code !== code) {
         otp.attempts += 1;
         await otp.save();
         return res.status(400).json({ message: 'Invalid verification code' });
       }
       
-      // Mark OTP as verified
+      // Code matches - mark OTP as verified
       otp.verified = true;
       await otp.save();
       
+      // If purpose is 'login', check if user exists and log them in
+      if (purpose === 'login') {
+        const user = await User.findOne({ mobile: mobileTrim });
+        if (!user) {
+          // User not found - return error to redirect to signup
+          return res.status(404).json({ 
+            message: 'account not found login',
+            redirectToSignup: true 
+          });
+        }
+        
+        // User exists - log them in
+        const token = generateToken(user._id);
+        return res.json({
+          message: 'Login successful',
+          token,
+          user: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            mobile: user.mobile,
+            role: user.role,
+          },
+        });
+      }
+      
+      // For signup or other purposes, just return success
       res.json({ message: 'Mobile number verified successfully' });
     } else {
-      // Email verification (existing logic)
+      // Email verification
       if (!email?.trim() || !code) {
         return res.status(400).json({ message: 'Email and code are required' });
       }
@@ -313,19 +352,48 @@ router.post('/verify-otp', async (req, res) => {
         return res.status(400).json({ message: 'Too many failed attempts. Please request a new code.' });
       }
       
-      // Verify code
+      // Verify code - if doesn't match, increment attempts and return error
       if (otp.code !== code) {
         otp.attempts += 1;
         await otp.save();
         return res.status(400).json({ message: 'Invalid verification code' });
       }
       
-      // Mark OTP as verified
+      // Code matches - mark OTP as verified
       otp.verified = true;
       await otp.save();
       
-      // If verifying for existing user, update emailVerified status
-      if (purpose === 'login' || purpose === 'reset') {
+      // If purpose is 'login', check if user exists and log them in
+      if (purpose === 'login') {
+        const user = await User.findOne({ email: emailLower });
+        if (!user) {
+          // User not found - return error to redirect to signup
+          return res.status(404).json({ 
+            message: 'account not found login',
+            redirectToSignup: true 
+          });
+        }
+        
+        // User exists - update emailVerified and log them in
+        user.emailVerified = true;
+        await user.save();
+        
+        const token = generateToken(user._id);
+        return res.json({
+          message: 'Login successful',
+          token,
+          user: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            mobile: user.mobile,
+            role: user.role,
+          },
+        });
+      }
+      
+      // If verifying for reset or other purposes, update emailVerified status
+      if (purpose === 'reset') {
         const user = await User.findOne({ email: emailLower });
         if (user) {
           user.emailVerified = true;

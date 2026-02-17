@@ -22,22 +22,34 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const data = await authApi.login(email, password);
     localStorage.setItem('token', data.token);
-    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile });
+    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile, role: data.role });
     return data;
   };
 
   const loginWithMobile = async (mobile, password) => {
     const data = await authApi.loginMobile(mobile, password);
     localStorage.setItem('token', data.token);
-    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile });
+    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile, role: data.role });
     return data;
   };
 
   const signup = async (name, email, password, mobile, otpCode, otpType) => {
     const data = await authApi.signup(name, email, password, mobile, otpCode, otpType);
     localStorage.setItem('token', data.token);
-    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile, emailVerified: data.emailVerified });
+    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile, emailVerified: data.emailVerified, role: data.role });
     return data;
+  };
+
+  const loginWithOTP = async (token, userData) => {
+    localStorage.setItem('token', token);
+    setUser({ 
+      _id: userData._id, 
+      name: userData.name, 
+      email: userData.email, 
+      mobile: userData.mobile, 
+      role: userData.role 
+    });
+    return { token, user: userData };
   };
 
   const logout = () => {
@@ -46,7 +58,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithMobile, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithMobile, signup, loginWithOTP, logout }}>
       {children}
     </AuthContext.Provider>
   );

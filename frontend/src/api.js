@@ -48,3 +48,32 @@ export const expenses = {
   settlement: (groupId, month) => request(`/groups/${groupId}/settlement?month=${encodeURIComponent(month)}`),
   settlementStatus: (groupId, month, status) => request(`/groups/${groupId}/settlement/status`, { method: 'PUT', body: JSON.stringify({ month, status }) }),
 };
+
+export const admin = {
+  stats: () => request('/admin/stats'),
+  getUsers: (params) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/admin/users${query ? `?${query}` : ''}`);
+  },
+  getUser: (id) => request(`/admin/users/${id}`),
+  updateUser: (id, data) => request(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  getOTPs: (params) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/admin/otps${query ? `?${query}` : ''}`);
+  },
+  deleteOTP: (id) => request(`/admin/otps/${id}`, { method: 'DELETE' }),
+  deleteOTPs: (params) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/admin/otps${query ? `?${query}` : ''}`, { method: 'DELETE' });
+  },
+  getGroups: (params) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/admin/groups${query ? `?${query}` : ''}`);
+  },
+  deleteGroup: (id) => request(`/admin/groups/${id}`, { method: 'DELETE' }),
+  getExpenses: (params) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/admin/expenses${query ? `?${query}` : ''}`);
+  },
+};

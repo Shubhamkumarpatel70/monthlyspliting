@@ -24,16 +24,17 @@ export const sendOTPSMS = async (mobile, code, purpose = 'signup') => {
       formattedMobile = `${countryCode}${formattedMobile}`;
     }
 
-    // Create WhatsApp message
+    // Create SMS message
     const message = `Your verification code for monthly splitting is ${code}`;
-    
-    // Encode message for URL
+
+    // WhatsApp link (requires manual send in WhatsApp)
     const encodedMessage = encodeURIComponent(message);
     
     // Generate WhatsApp link
     const whatsappLink = `https://wa.me/${formattedMobile.replace(/\+/g, '')}?text=${encodedMessage}`;
     
     if (process.env.NODE_ENV === 'development') {
+      console.log('📱 [WhatsApp OTP] Using WhatsApp link');
       console.log('📱 [WhatsApp OTP] Mobile:', formattedMobile);
       console.log('📱 [WhatsApp OTP] Code:', code);
       console.log('📱 [WhatsApp OTP] Link:', whatsappLink);
@@ -45,11 +46,12 @@ export const sendOTPSMS = async (mobile, code, purpose = 'signup') => {
       provider: 'whatsapp',
       whatsappLink,
       mobile: formattedMobile,
+      message: 'Click the WhatsApp link to receive your verification code',
       code, // Include code in development for testing
     };
   } catch (error) {
-    console.error('Error generating WhatsApp link:', error);
-    throw new Error('Failed to generate WhatsApp verification link. Please try again.');
+    console.error('Error sending OTP:', error);
+    throw new Error('Failed to send verification code. Please try again.');
   }
 };
 

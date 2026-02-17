@@ -27,6 +27,8 @@ export default function GroupDetail() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberMobile, setMemberMobile] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
+  const [editNameOpen, setEditNameOpen] = useState(false);
+  const [editGroupName, setEditGroupName] = useState('');
 
   const isAdmin = group?.members?.some(m => (m.user?._id || m.user)?.toString() === user?._id && m.role === 'admin');
 
@@ -34,9 +36,12 @@ export default function GroupDetail() {
     try {
       const data = await groupsApi.get(groupId);
       setGroup(data);
+      setError('');
     } catch (err) {
       setError(err.message);
-      if (err.message?.includes('not found')) navigate('/dashboard');
+      if (err.message?.includes('not found') || err.message?.toLowerCase().includes('not a member')) {
+        navigate('/dashboard', { replace: true });
+      }
     }
   };
 
@@ -209,6 +214,30 @@ export default function GroupDetail() {
     }
   };
 
+  const handleEditGroupName = async (e) => {
+    e?.preventDefault?.();
+    const name = editGroupName?.trim();
+    if (!name) return;
+    try {
+      await groupsApi.update(groupId, { name });
+      setEditNameOpen(false);
+      setEditGroupName('');
+      loadGroup();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!confirm('Delete this group? All expenses and data will be permanently removed.')) return;
+    try {
+      await groupsApi.delete(groupId);
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   if (!group) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -231,8 +260,28 @@ export default function GroupDetail() {
           <button onClick={() => navigate('/dashboard')} className="text-textSecondary hover:text-primary text-sm mb-2 flex items-center gap-1 touch-manipulation">
             ← Back to dashboard
           </button>
-          <h1 className="text-xl sm:text-2xl font-bold text-textPrimary break-words">{group.name}</h1>
-          <p className="text-textSecondary text-sm mt-1">{group.members?.length || 0} members</p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-textPrimary break-words">{group.name}</h1>
+              <p className="text-textSecondary text-sm mt-1">{group.members?.length || 0} members</p>
+            </div>
+            {isAdmin && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setEditGroupName(group.name); setEditNameOpen(true); }}
+                  className="min-h-[36px] px-3 py-1.5 rounded-lg bg-surface border border-white/10 text-textSecondary text-sm hover:border-primary/30 hover:text-primary touch-manipulation"
+                >
+                  Edit name
+                </button>
+                <button
+                  onClick={handleDeleteGroup}
+                  className="min-h-[36px] px-3 py-1.5 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm hover:bg-danger/20 touch-manipulation"
+                >
+                  Delete group
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex flex-col xs:flex-row flex-wrap gap-2">
           <select
@@ -310,6 +359,28 @@ export default function GroupDetail() {
               <div className="flex gap-2">
                 <button type="button" onClick={() => setAddMemberOpen(false)} className="flex-1 py-2.5 rounded-lg border border-white/20 text-textSecondary">Cancel</button>
                 <button type="submit" className="flex-1 py-2.5 rounded-lg bg-primary text-darkBg font-semibold">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editNameOpen && isAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setEditNameOpen(false)}>
+          <div className="bg-surface rounded-2xl border border-white/10 p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-textPrimary mb-4">Edit group name</h2>
+            <form onSubmit={handleEditGroupName}>
+              <input
+                type="text"
+                value={editGroupName}
+                onChange={(e) => setEditGroupName(e.target.value)}
+                placeholder="Group name"
+                className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+                required
+              />
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setEditNameOpen(false)} className="flex-1 py-2.5 rounded-lg border border-white/20 text-textSecondary">Cancel</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-lg bg-primary text-darkBg font-semibold">Save</button>
               </div>
             </form>
           </div>

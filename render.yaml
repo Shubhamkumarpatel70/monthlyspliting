@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: monthly-split
+    runtime: node
+    region: singapore
+
+    # Build: install all deps and build frontend
+    buildCommand: |
+      npm install
+      cd frontend && npm install && npm run build
+      cd ../backend && npm install
+
+    # Start: run backend (serves API + static frontend)
+    startCommand: cd backend && node server.js
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false

@@ -5,10 +5,7 @@ services:
     region: singapore
 
     # Build: install all deps and build frontend
-    buildCommand: |
-      npm install
-      cd frontend && npm install && npm run build
-      cd ../backend && npm install
+    buildCommand: npm install && cd frontend && npm install --include=dev && npm run build && cd ../backend && npm install
 
     # Start: run backend (serves API + static frontend)
     startCommand: cd backend && node server.js

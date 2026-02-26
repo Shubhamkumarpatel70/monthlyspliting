@@ -50,6 +50,16 @@ export const auth = {
       method: "POST",
       body: JSON.stringify({ email, mobile, purpose, type }),
     }),
+  forgotPasswordCheck: (email) =>
+    request("/auth/forgot-password/check", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  forgotPasswordReset: (email, password) =>
+    request("/auth/forgot-password/reset", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
 };
 
 export const groups = {
@@ -162,4 +172,10 @@ export const admin = {
     const query = new URLSearchParams(params).toString();
     return request(`/admin/expenses${query ? `?${query}` : ""}`);
   },
+  getTransactions: (params) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/admin/transactions${query ? `?${query}` : ""}`);
+  },
+  getGroupsList: () => request("/admin/groups-list"),
+  getUsersList: () => request("/admin/users-list"),
 };

@@ -1,19 +1,20 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
-import Splash from './pages/Splash';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
-import GroupDetail from './pages/GroupDetail';
-import JoinGroup from './pages/JoinGroup';
-import Layout from './components/Layout';
-import AdminLayout from './components/AdminLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import Users from './pages/admin/Users';
-import OTPs from './pages/admin/OTPs';
-import Groups from './pages/admin/Groups';
-import Expenses from './pages/admin/Expenses';
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+import Splash from "./pages/Splash";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Dashboard from "./pages/Dashboard";
+import GroupDetail from "./pages/GroupDetail";
+import JoinGroup from "./pages/JoinGroup";
+import Layout from "./components/Layout";
+import AdminLayout from "./components/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import Users from "./pages/admin/Users";
+import OTPs from "./pages/admin/OTPs";
+import Groups from "./pages/admin/Groups";
+import Expenses from "./pages/admin/Expenses";
+import Transactions from "./pages/admin/Transactions";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -26,7 +27,7 @@ function AdminRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Splash />;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
+  if (user.role !== "admin") return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -41,14 +42,30 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Splash />} />
-      <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
-      <Route path="/signup" element={<PublicOnly><Signup /></PublicOnly>} />
+      <Route
+        path="/login"
+        element={
+          <PublicOnly>
+            <Login />
+          </PublicOnly>
+        }
+      />
+      <Route
+        path="/signup"
+        element={
+          <PublicOnly>
+            <Signup />
+          </PublicOnly>
+        }
+      />
       <Route path="/join/:groupId" element={<JoinGroup />} />
       <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <Layout><Dashboard /></Layout>
+            <Layout>
+              <Dashboard />
+            </Layout>
           </ProtectedRoute>
         }
       />
@@ -56,7 +73,9 @@ export default function App() {
         path="/group/:groupId"
         element={
           <ProtectedRoute>
-            <Layout><GroupDetail /></Layout>
+            <Layout>
+              <GroupDetail />
+            </Layout>
           </ProtectedRoute>
         }
       />
@@ -65,7 +84,9 @@ export default function App() {
         path="/admin"
         element={
           <AdminRoute>
-            <AdminLayout><AdminDashboard /></AdminLayout>
+            <AdminLayout>
+              <AdminDashboard />
+            </AdminLayout>
           </AdminRoute>
         }
       />
@@ -73,7 +94,9 @@ export default function App() {
         path="/admin/users"
         element={
           <AdminRoute>
-            <AdminLayout><Users /></AdminLayout>
+            <AdminLayout>
+              <Users />
+            </AdminLayout>
           </AdminRoute>
         }
       />
@@ -81,7 +104,9 @@ export default function App() {
         path="/admin/otps"
         element={
           <AdminRoute>
-            <AdminLayout><OTPs /></AdminLayout>
+            <AdminLayout>
+              <OTPs />
+            </AdminLayout>
           </AdminRoute>
         }
       />
@@ -89,7 +114,9 @@ export default function App() {
         path="/admin/groups"
         element={
           <AdminRoute>
-            <AdminLayout><Groups /></AdminLayout>
+            <AdminLayout>
+              <Groups />
+            </AdminLayout>
           </AdminRoute>
         }
       />
@@ -97,7 +124,19 @@ export default function App() {
         path="/admin/expenses"
         element={
           <AdminRoute>
-            <AdminLayout><Expenses /></AdminLayout>
+            <AdminLayout>
+              <Expenses />
+            </AdminLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/transactions"
+        element={
+          <AdminRoute>
+            <AdminLayout>
+              <Transactions />
+            </AdminLayout>
           </AdminRoute>
         }
       />

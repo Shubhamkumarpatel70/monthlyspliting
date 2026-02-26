@@ -23,14 +23,18 @@ export default function PaymentModal({
   const fromName =
     transaction?.fromName ?? transaction?.from?.name ?? "Unknown";
   const toName = transaction?.toName ?? transaction?.to?.name ?? "Unknown";
-  
+
   // Use remainingAmount if provided (for partial payments), otherwise use full amount
-  const payableAmount = transaction?.remainingAmount != null && transaction?.remainingAmount > 0
-    ? Number(transaction.remainingAmount)
-    : Number(transaction?.amount || 0);
+  const payableAmount =
+    transaction?.remainingAmount != null && transaction?.remainingAmount > 0
+      ? Number(transaction.remainingAmount)
+      : Number(transaction?.amount || 0);
   const amount = payableAmount.toFixed(2);
   const totalAmount = Number(transaction?.amount || 0).toFixed(2);
-  const isPartialPayment = transaction?.remainingAmount != null && transaction?.remainingAmount > 0 && transaction?.remainingAmount < Number(transaction?.amount || 0);
+  const isPartialPayment =
+    transaction?.remainingAmount != null &&
+    transaction?.remainingAmount > 0 &&
+    transaction?.remainingAmount < Number(transaction?.amount || 0);
 
   const isCurrentUserPayer = currentUserId === fromId;
 
@@ -126,7 +130,11 @@ export default function PaymentModal({
         {/* Header */}
         <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-textPrimary">
-            {step === "success" ? "Payment Recorded" : isPartialPayment ? "Pay Remaining Amount" : "Pay Settlement"}
+            {step === "success"
+              ? "Payment Recorded"
+              : isPartialPayment
+                ? "Pay Remaining Amount"
+                : "Pay Settlement"}
           </h2>
           <button
             onClick={handleClose}
@@ -152,7 +160,9 @@ export default function PaymentModal({
           {/* Amount Display */}
           <div className="text-center py-4 bg-darkBg/50 rounded-xl border border-white/5">
             {isPartialPayment && (
-              <p className="text-warning text-xs mb-2 font-medium">Remaining balance</p>
+              <p className="text-warning text-xs mb-2 font-medium">
+                Remaining balance
+              </p>
             )}
             <p className="text-textSecondary text-sm mb-1">Amount to pay</p>
             <p className="text-3xl font-bold text-success">₹{amount}</p>
@@ -305,8 +315,18 @@ export default function PaymentModal({
                     }}
                     className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-green-500 text-white font-semibold text-center hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                   >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                      />
                     </svg>
                     Open UPI App to Pay ₹{amount}
                   </button>
@@ -322,8 +342,18 @@ export default function PaymentModal({
                     }}
                     className="w-full py-2 px-4 rounded-lg bg-surface border border-white/10 text-textPrimary hover:border-primary/30 flex items-center justify-center gap-2"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
                     </svg>
                     Copy UPI ID
                   </button>
@@ -336,7 +366,7 @@ export default function PaymentModal({
                     add it in their profile, or pay via another method.
                   </p>
                 </div>
-              )}}
+              )}
 
               <div className="border-t border-white/5 pt-4 mt-4">
                 <p className="text-textSecondary text-sm mb-3">

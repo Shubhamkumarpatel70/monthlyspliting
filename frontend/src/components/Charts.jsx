@@ -115,11 +115,38 @@ export default function Charts({
   const totalContribution = memberData.reduce((sum, m) => sum + m.paid, 0);
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2">
+    <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2">
       {categoryData.length > 0 && (
-        <div className="bg-surface rounded-2xl border border-white/5 p-5">
-          <h3 className="text-textPrimary font-semibold mb-4">By category</h3>
-          <div className="h-64">
+        <div className="bg-surface rounded-2xl border border-white/5 p-4 sm:p-5">
+          <h3 className="text-textPrimary font-semibold mb-3 sm:mb-4">
+            By category
+          </h3>
+
+          {/* Category list for mobile */}
+          <div className="space-y-2 mb-4 sm:hidden">
+            {categoryData.map((cat, i) => (
+              <div
+                key={cat.name}
+                className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{
+                      backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+                    }}
+                  />
+                  <span className="text-textPrimary text-sm">{cat.name}</span>
+                </div>
+                <span className="text-primary font-medium text-sm">
+                  ₹{cat.value.toFixed(0)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Pie chart for larger screens */}
+          <div className="h-48 sm:h-64 hidden sm:block">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -128,8 +155,9 @@ export default function Charts({
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={80}
-                  label={({ name, value }) => `${name} ₹${value.toFixed(0)}`}
+                  outerRadius={70}
+                  label={({ name, value }) => `${name}: ₹${value.toFixed(0)}`}
+                  labelLine={{ stroke: "#64748B", strokeWidth: 1 }}
                 >
                   {categoryData.map((_, i) => (
                     <Cell
@@ -153,30 +181,30 @@ export default function Charts({
       )}
 
       {memberData.length > 0 && (
-        <div className="bg-surface rounded-2xl border border-white/5 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-textPrimary font-semibold">
+        <div className="bg-surface rounded-2xl border border-white/5 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3 sm:mb-4">
+            <h3 className="text-textPrimary font-semibold text-sm sm:text-base">
               Contribution by member
             </h3>
-            <span className="text-textSecondary text-sm">
+            <span className="text-textSecondary text-xs sm:text-sm">
               Total: ₹{totalContribution.toFixed(2)}
             </span>
           </div>
 
           {/* Progress bars for each member */}
-          <div className="space-y-4 mb-4">
+          <div className="space-y-3 sm:space-y-4 mb-3 sm:mb-4">
             {memberData.map((member, i) => (
               <div key={member.name}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-textPrimary text-sm font-medium">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-textPrimary text-xs sm:text-sm font-medium truncate max-w-[120px] sm:max-w-none">
                     {member.name}
                   </span>
-                  <span className="text-textSecondary text-sm">
+                  <span className="text-textSecondary text-xs sm:text-sm">
                     ₹{member.paid.toFixed(2)}
                     <span className="text-xs ml-1">({member.percentage}%)</span>
                   </span>
                 </div>
-                <div className="h-3 bg-darkBg rounded-full overflow-hidden">
+                <div className="h-2.5 sm:h-3 bg-darkBg rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
@@ -189,8 +217,8 @@ export default function Charts({
             ))}
           </div>
 
-          {/* Small bar chart */}
-          <div className="h-32 mt-4">
+          {/* Small bar chart - hidden on mobile */}
+          <div className="h-28 sm:h-32 mt-3 sm:mt-4 hidden sm:block">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={memberData}
@@ -226,7 +254,7 @@ export default function Charts({
       )}
 
       {monthCompareData.data?.length > 0 && (
-        <div className="bg-surface rounded-2xl border border-white/5 p-5 sm:col-span-2">
+        <div className="bg-surface rounded-2xl border border-white/5 p-4 sm:p-5 col-span-1 sm:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <h3 className="text-textPrimary font-semibold">Month comparison</h3>
             {monthCompareData.prevTotal > 0 && (
@@ -275,26 +303,26 @@ export default function Charts({
           </div>
 
           {/* Comparison cards */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-darkBg/50 rounded-xl p-4 border border-white/5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <div className="bg-darkBg/50 rounded-xl p-3 sm:p-4 border border-white/5">
               <p className="text-textSecondary text-xs mb-1">
                 {monthCompareData.data[0]?.month}
               </p>
-              <p className="text-xl font-bold text-textSecondary">
-                ₹{monthCompareData.prevTotal.toFixed(2)}
+              <p className="text-base sm:text-xl font-bold text-textSecondary">
+                ₹{monthCompareData.prevTotal.toFixed(0)}
               </p>
             </div>
-            <div className="bg-primary/10 rounded-xl p-4 border border-primary/30">
+            <div className="bg-primary/10 rounded-xl p-3 sm:p-4 border border-primary/30">
               <p className="text-primary text-xs mb-1">
                 {monthCompareData.data[1]?.month}
               </p>
-              <p className="text-xl font-bold text-primary">
-                ₹{monthCompareData.currentTotal.toFixed(2)}
+              <p className="text-base sm:text-xl font-bold text-primary">
+                ₹{monthCompareData.currentTotal.toFixed(0)}
               </p>
             </div>
           </div>
 
-          <div className="h-48">
+          <div className="h-36 sm:h-48 hidden sm:block">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={monthCompareData.data}

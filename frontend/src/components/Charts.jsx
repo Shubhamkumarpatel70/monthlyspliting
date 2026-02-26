@@ -1,54 +1,118 @@
-import React, { useMemo } from 'react';
-import { format } from 'date-fns';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import React, { useMemo } from "react";
+import { format } from "date-fns";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+} from "recharts";
 
-const CHART_COLORS = ['#22D3EE', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+const CHART_COLORS = [
+  "#22D3EE",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#EC4899",
+];
+const MEMBER_COLORS = [
+  "#22D3EE",
+  "#10B981",
+  "#F59E0B",
+  "#8B5CF6",
+  "#EC4899",
+  "#14B8A6",
+];
 
 function formatMonthLabel(yyyyMm) {
-  if (!yyyyMm) return '';
-  const [y, m] = yyyyMm.split('-').map(Number);
-  return format(new Date(y, m - 1, 1), 'MMM yyyy');
+  if (!yyyyMm) return "";
+  const [y, m] = yyyyMm.split("-").map(Number);
+  return format(new Date(y, m - 1, 1), "MMM yyyy");
 }
 
 function getPreviousMonth(yyyyMm) {
   if (!yyyyMm) return null;
-  const [yr, mo] = yyyyMm.split('-').map(Number);
+  const [yr, mo] = yyyyMm.split("-").map(Number);
   if (mo === 1) return `${yr - 1}-12`;
-  return `${yr}-${String(mo - 1).padStart(2, '0')}`;
+  return `${yr}-${String(mo - 1).padStart(2, "0")}`;
 }
 
-export default function Charts({ expenses, group, balances, selectedMonth, previousMonthBalances }) {
+export default function Charts({
+  expenses,
+  group,
+  balances,
+  selectedMonth,
+  previousMonthBalances,
+}) {
   const categoryData = useMemo(() => {
     const byCat = {};
     expenses.forEach((e) => {
-      const label = e.category === 'Custom' && e.customCategory ? e.customCategory : e.category;
+      const label =
+        e.category === "Custom" && e.customCategory
+          ? e.customCategory
+          : e.category;
       byCat[label] = (byCat[label] || 0) + e.amount;
     });
-    return Object.entries(byCat).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+    return Object.entries(byCat)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
   }, [expenses]);
 
   const memberData = useMemo(() => {
     if (!balances?.paidByUser || !group?.members) return [];
-    return group.members.map((m) => {
-      const u = m.user;
-      const id = (u?._id || u)?.toString();
-      const paid = balances.paidByUser[id] ?? 0;
-      return { name: u?.name ?? 'Unknown', paid: Math.round(paid * 100) / 100 };
-    }).filter((d) => d.paid > 0 || categoryData.length === 0);
-  }, [balances, group, categoryData.length]);
+    const totalExpense = balances?.totalExpense || 0;
+    return group.members
+      .map((m, index) => {
+        const u = m.user;
+        const id = (u?._id || u)?.toString();
+        const paid = balances.paidByUser[id] ?? 0;
+        const percentage =
+          totalExpense > 0 ? ((paid / totalExpense) * 100).toFixed(1) : 0;
+        return {
+          name: u?.name ?? "Unknown",
+          paid: Math.round(paid * 100) / 100,
+          percentage: Number(percentage),
+          fill: MEMBER_COLORS[index % MEMBER_COLORS.length],
+        };
+      })
+      .sort((a, b) => b.paid - a.paid);
+  }, [balances, group]);
 
   const monthCompareData = useMemo(() => {
     if (!selectedMonth) return [];
     const currentTotal = balances?.totalExpense ?? 0;
     const prevMonth = getPreviousMonth(selectedMonth);
     const prevTotal = previousMonthBalances?.totalExpense ?? 0;
-    const prevLabel = prevMonth ? formatMonthLabel(prevMonth) : 'Previous month';
+    const prevLabel = prevMonth
+      ? formatMonthLabel(prevMonth)
+      : "Previous month";
     const currLabel = formatMonthLabel(selectedMonth);
-    return [
-      { month: prevLabel, total: Number(prevTotal), fill: '#64748B' },
-      { month: currLabel, total: Number(currentTotal), fill: '#22D3EE' },
-    ];
-  }, [selectedMonth, balances?.totalExpense, previousMonthBalances?.totalExpense]);
+    const difference = currentTotal - prevTotal;
+    const percentChange =
+      prevTotal > 0 ? ((difference / prevTotal) * 100).toFixed(1) : 0;
+    return {
+      data: [
+        { month: prevLabel, total: Number(prevTotal), fill: "#64748B" },
+        { month: currLabel, total: Number(currentTotal), fill: "#22D3EE" },
+      ],
+      difference,
+      percentChange: Number(percentChange),
+      prevTotal,
+      currentTotal,
+    };
+  }, [
+    selectedMonth,
+    balances?.totalExpense,
+    previousMonthBalances?.totalExpense,
+  ]);
+
+  const totalContribution = memberData.reduce((sum, m) => sum + m.paid, 0);
 
   return (
     <div className="grid gap-6 sm:grid-cols-2">
@@ -68,41 +132,195 @@ export default function Charts({ expenses, group, balances, selectedMonth, previ
                   label={({ name, value }) => `${name} ₹${value.toFixed(0)}`}
                 >
                   {categoryData.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    <Cell
+                      key={i}
+                      fill={CHART_COLORS[i % CHART_COLORS.length]}
+                    />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v) => [`₹${Number(v).toFixed(2)}`, 'Amount']} contentStyle={{ backgroundColor: '#1E293B', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} />
+                <Tooltip
+                  formatter={(v) => [`₹${Number(v).toFixed(2)}`, "Amount"]}
+                  contentStyle={{
+                    backgroundColor: "#1E293B",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "8px",
+                  }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
+
       {memberData.length > 0 && (
         <div className="bg-surface rounded-2xl border border-white/5 p-5">
-          <h3 className="text-textPrimary font-semibold mb-4">Contribution by member</h3>
-          <div className="h-64">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-textPrimary font-semibold">
+              Contribution by member
+            </h3>
+            <span className="text-textSecondary text-sm">
+              Total: ₹{totalContribution.toFixed(2)}
+            </span>
+          </div>
+
+          {/* Progress bars for each member */}
+          <div className="space-y-4 mb-4">
+            {memberData.map((member, i) => (
+              <div key={member.name}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-textPrimary text-sm font-medium">
+                    {member.name}
+                  </span>
+                  <span className="text-textSecondary text-sm">
+                    ₹{member.paid.toFixed(2)}
+                    <span className="text-xs ml-1">({member.percentage}%)</span>
+                  </span>
+                </div>
+                <div className="h-3 bg-darkBg rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${member.percentage}%`,
+                      backgroundColor: member.fill,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Small bar chart */}
+          <div className="h-32 mt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={memberData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                <XAxis dataKey="name" tick={{ fill: '#94A3B8', fontSize: 12 }} />
-                <YAxis tick={{ fill: '#94A3B8', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-                <Tooltip formatter={(v) => [`₹${Number(v).toFixed(2)}`, 'Paid']} contentStyle={{ backgroundColor: '#1E293B', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} />
-                <Bar dataKey="paid" fill="#22D3EE" radius={[4, 4, 0, 0]} name="Paid" />
+              <BarChart
+                data={memberData}
+                margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+              >
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: "#94A3B8", fontSize: 11 }}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fill: "#94A3B8", fontSize: 10 }}
+                  tickFormatter={(v) => `₹${v}`}
+                  width={45}
+                />
+                <Tooltip
+                  formatter={(v) => [`₹${Number(v).toFixed(2)}`, "Paid"]}
+                  contentStyle={{
+                    backgroundColor: "#1E293B",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "8px",
+                  }}
+                />
+                <Bar dataKey="paid" radius={[4, 4, 0, 0]} name="Paid">
+                  {memberData.map((entry, index) => (
+                    <Cell key={index} fill={entry.fill} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
-      {monthCompareData.length > 0 && (
+
+      {monthCompareData.data?.length > 0 && (
         <div className="bg-surface rounded-2xl border border-white/5 p-5 sm:col-span-2">
-          <h3 className="text-textPrimary font-semibold mb-4">Month comparison</h3>
-          <div className="h-64">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <h3 className="text-textPrimary font-semibold">Month comparison</h3>
+            {monthCompareData.prevTotal > 0 && (
+              <div
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${monthCompareData.difference > 0 ? "bg-danger/10 text-danger" : monthCompareData.difference < 0 ? "bg-success/10 text-success" : "bg-white/5 text-textSecondary"}`}
+              >
+                {monthCompareData.difference > 0 ? (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 10l7-7m0 0l7 7m-7-7v18"
+                    />
+                  </svg>
+                ) : monthCompareData.difference < 0 ? (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                    />
+                  </svg>
+                ) : null}
+                <span className="text-sm font-medium">
+                  {monthCompareData.difference > 0 ? "+" : ""}₹
+                  {Math.abs(monthCompareData.difference).toFixed(2)}
+                  <span className="text-xs ml-1">
+                    ({monthCompareData.difference > 0 ? "+" : ""}
+                    {monthCompareData.percentChange}%)
+                  </span>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Comparison cards */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-darkBg/50 rounded-xl p-4 border border-white/5">
+              <p className="text-textSecondary text-xs mb-1">
+                {monthCompareData.data[0]?.month}
+              </p>
+              <p className="text-xl font-bold text-textSecondary">
+                ₹{monthCompareData.prevTotal.toFixed(2)}
+              </p>
+            </div>
+            <div className="bg-primary/10 rounded-xl p-4 border border-primary/30">
+              <p className="text-primary text-xs mb-1">
+                {monthCompareData.data[1]?.month}
+              </p>
+              <p className="text-xl font-bold text-primary">
+                ₹{monthCompareData.currentTotal.toFixed(2)}
+              </p>
+            </div>
+          </div>
+
+          <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthCompareData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                <XAxis dataKey="month" tick={{ fill: '#94A3B8', fontSize: 12 }} />
-                <YAxis tick={{ fill: '#94A3B8', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-                <Tooltip formatter={(v) => [`₹${Number(v).toFixed(2)}`, 'Total expense']} contentStyle={{ backgroundColor: '#1E293B', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }} />
+              <BarChart
+                data={monthCompareData.data}
+                margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+              >
+                <XAxis
+                  dataKey="month"
+                  tick={{ fill: "#94A3B8", fontSize: 12 }}
+                />
+                <YAxis
+                  tick={{ fill: "#94A3B8", fontSize: 12 }}
+                  tickFormatter={(v) => `₹${v}`}
+                />
+                <Tooltip
+                  formatter={(v) => [
+                    `₹${Number(v).toFixed(2)}`,
+                    "Total expense",
+                  ]}
+                  contentStyle={{
+                    backgroundColor: "#1E293B",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "8px",
+                  }}
+                />
                 <Bar dataKey="total" radius={[4, 4, 0, 0]} name="Total expense">
-                  {monthCompareData.map((entry, i) => (
+                  {monthCompareData.data.map((entry, i) => (
                     <Cell key={i} fill={entry.fill} />
                   ))}
                 </Bar>

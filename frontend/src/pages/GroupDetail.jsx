@@ -1,13 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
-import { groups as groupsApi, expenses as expensesApi } from '../api';
-import { useAuth } from '../context/AuthContext';
-import ExpenseForm from '../components/ExpenseForm';
-import SettlementView from '../components/SettlementView';
-import Charts from '../components/Charts';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { format } from "date-fns";
+import {
+  groups as groupsApi,
+  expenses as expensesApi,
+  payments as paymentsApi,
+} from "../api";
+import { useAuth } from "../context/AuthContext";
+import ExpenseForm from "../components/ExpenseForm";
+import SettlementView from "../components/SettlementView";
+import Charts from "../components/Charts";
 
-const CATEGORIES = ['Food', 'Rent', 'Utilities', 'Misc', 'Custom'];
+const CATEGORIES = ["Food", "Rent", "Utilities", "Misc", "Custom"];
 
 export default function GroupDetail() {
   const { groupId } = useParams();
@@ -16,31 +20,38 @@ export default function GroupDetail() {
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [months, setMonths] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState("");
   const [balances, setBalances] = useState(null);
   const [settlement, setSettlement] = useState(null);
+  const [payments, setPayments] = useState([]);
   const [previousMonthBalances, setPreviousMonthBalances] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
-  const [memberMobile, setMemberMobile] = useState('');
+  const [memberMobile, setMemberMobile] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
   const [editNameOpen, setEditNameOpen] = useState(false);
-  const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupName, setEditGroupName] = useState("");
 
-  const isAdmin = group?.members?.some(m => (m.user?._id || m.user)?.toString() === user?._id && m.role === 'admin');
+  const isAdmin = group?.members?.some(
+    (m) =>
+      (m.user?._id || m.user)?.toString() === user?._id && m.role === "admin",
+  );
 
   const loadGroup = async () => {
     try {
       const data = await groupsApi.get(groupId);
       setGroup(data);
-      setError('');
+      setError("");
     } catch (err) {
       setError(err.message);
-      if (err.message?.includes('not found') || err.message?.toLowerCase().includes('not a member')) {
-        navigate('/dashboard', { replace: true });
+      if (
+        err.message?.includes("not found") ||
+        err.message?.toLowerCase().includes("not a member")
+      ) {
+        navigate("/dashboard", { replace: true });
       }
     }
   };
@@ -49,7 +60,7 @@ export default function GroupDetail() {
     try {
       const data = await expensesApi.months(groupId);
       setMonths(data);
-      const current = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+      const current = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
       setSelectedMonth((prev) => prev || (data.length ? data[0] : current));
     } catch (_) {}
   };
@@ -73,6 +84,16 @@ export default function GroupDetail() {
     } catch (_) {}
   };
 
+  const loadPayments = async () => {
+    if (!selectedMonth) return;
+    try {
+      const data = await paymentsApi.list(groupId, selectedMonth);
+      setPayments(Array.isArray(data) ? data : []);
+    } catch (_) {
+      setPayments([]);
+    }
+  };
+
   const loadSettlement = async () => {
     if (!selectedMonth) return;
     try {
@@ -83,9 +104,9 @@ export default function GroupDetail() {
 
   const getPreviousMonth = (yyyyMm) => {
     if (!yyyyMm) return null;
-    const [y, m] = yyyyMm.split('-').map(Number);
+    const [y, m] = yyyyMm.split("-").map(Number);
     if (m === 1) return `${y - 1}-12`;
-    return `${y}-${String(m - 1).padStart(2, '0')}`;
+    return `${y}-${String(m - 1).padStart(2, "0")}`;
   };
 
   const loadPreviousMonthBalances = async () => {
@@ -117,6 +138,7 @@ export default function GroupDetail() {
       loadExpenses(),
       loadBalances(),
       loadSettlement(),
+      loadPayments(),
       loadPreviousMonthBalances(),
     ]).finally(() => setLoading(false));
   }, [groupId, selectedMonth]);
@@ -127,13 +149,18 @@ export default function GroupDetail() {
     const POLL_MS = 8000;
     let intervalId;
     const poll = () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
       loadGroup();
       loadMonths();
       if (selectedMonth) {
         loadExpenses();
         loadBalances();
         loadSettlement();
+        loadPayments();
         loadPreviousMonthBalances();
       }
     };
@@ -148,7 +175,27 @@ export default function GroupDetail() {
       loadExpenses();
       loadBalances();
       loadSettlement();
+      loadPayments();
       loadPreviousMonthBalances();
+    }
+  };
+
+  const handleConfirmPayment = async (paymentId) => {
+    try {
+      await paymentsApi.confirm(groupId, paymentId);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleRejectPayment = async (paymentId) => {
+    if (!confirm("Are you sure the payment was not received?")) return;
+    try {
+      await paymentsApi.reject(groupId, paymentId, "Payment not received");
+      refresh();
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -165,7 +212,7 @@ export default function GroupDetail() {
   };
 
   const handleDeleteExpense = async (expenseId) => {
-    if (!confirm('Delete this expense?')) return;
+    if (!confirm("Delete this expense?")) return;
     await expensesApi.delete(groupId, expenseId);
     setEditingExpense(null);
     refresh();
@@ -173,12 +220,12 @@ export default function GroupDetail() {
 
   const handleAddMember = async (e) => {
     e.preventDefault();
-    const mobile = memberMobile.replace(/\D/g, '').trim();
+    const mobile = memberMobile.replace(/\D/g, "").trim();
     if (!mobile) return;
-    setError('');
+    setError("");
     try {
       await groupsApi.addMember(groupId, mobile);
-      setMemberMobile('');
+      setMemberMobile("");
       setAddMemberOpen(false);
       loadGroup();
     } catch (err) {
@@ -195,7 +242,7 @@ export default function GroupDetail() {
   };
 
   const handleRemoveMember = async (userId) => {
-    if (!confirm('Remove this member from the group?')) return;
+    if (!confirm("Remove this member from the group?")) return;
     try {
       await groupsApi.removeMember(groupId, userId);
       loadGroup();
@@ -221,7 +268,7 @@ export default function GroupDetail() {
     try {
       await groupsApi.update(groupId, { name });
       setEditNameOpen(false);
-      setEditGroupName('');
+      setEditGroupName("");
       loadGroup();
     } catch (err) {
       setError(err.message);
@@ -229,10 +276,15 @@ export default function GroupDetail() {
   };
 
   const handleDeleteGroup = async () => {
-    if (!confirm('Delete this group? All expenses and data will be permanently removed.')) return;
+    if (
+      !confirm(
+        "Delete this group? All expenses and data will be permanently removed.",
+      )
+    )
+      return;
     try {
       await groupsApi.delete(groupId);
-      navigate('/dashboard', { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err.message);
     }
@@ -246,32 +298,49 @@ export default function GroupDetail() {
     );
   }
 
-  const settlementStatus = settlement?.status ?? 'pending';
-  const canAddExpense = settlementStatus === 'pending';
+  const settlementStatus = settlement?.status ?? "pending";
+  const canAddExpense = settlementStatus === "pending";
 
-  const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-  const monthOptions = [...new Set([...months, currentMonthStr])].sort().reverse();
-  const displayMonth = selectedMonth ? (() => {
-    const [y, m] = selectedMonth.split('-');
-    return format(new Date(parseInt(y, 10), parseInt(m, 10) - 1), 'MMMM yyyy');
-  })() : '';
+  const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  const monthOptions = [...new Set([...months, currentMonthStr])]
+    .sort()
+    .reverse();
+  const displayMonth = selectedMonth
+    ? (() => {
+        const [y, m] = selectedMonth.split("-");
+        return format(
+          new Date(parseInt(y, 10), parseInt(m, 10) - 1),
+          "MMMM yyyy",
+        );
+      })()
+    : "";
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-24 sm:pb-8">
       <div className="flex flex-col gap-4">
         <div>
-          <button onClick={() => navigate('/dashboard')} className="text-textSecondary hover:text-primary text-sm mb-2 flex items-center gap-1 touch-manipulation">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="text-textSecondary hover:text-primary text-sm mb-2 flex items-center gap-1 touch-manipulation"
+          >
             ← Back to dashboard
           </button>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-textPrimary break-words">{group.name}</h1>
-              <p className="text-textSecondary text-sm mt-1">{group.members?.length || 0} members</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-textPrimary break-words">
+                {group.name}
+              </h1>
+              <p className="text-textSecondary text-sm mt-1">
+                {group.members?.length || 0} members
+              </p>
             </div>
             {isAdmin && (
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setEditGroupName(group.name); setEditNameOpen(true); }}
+                  onClick={() => {
+                    setEditGroupName(group.name);
+                    setEditNameOpen(true);
+                  }}
                   className="min-h-[36px] px-3 py-1.5 rounded-lg bg-surface border border-white/10 text-textSecondary text-sm hover:border-primary/30 hover:text-primary touch-manipulation"
                 >
                   Edit name
@@ -296,8 +365,11 @@ export default function GroupDetail() {
             {monthOptions.map((m) => (
               <option key={m} value={m}>
                 {(() => {
-                  const [y, mo] = m.split('-');
-                  return format(new Date(parseInt(y, 10), parseInt(mo, 10) - 1), 'MMMM yyyy');
+                  const [y, mo] = m.split("-");
+                  return format(
+                    new Date(parseInt(y, 10), parseInt(mo, 10) - 1),
+                    "MMMM yyyy",
+                  );
                 })()}
               </option>
             ))}
@@ -306,8 +378,12 @@ export default function GroupDetail() {
             <button
               onClick={() => canAddExpense && setAddExpenseOpen(true)}
               disabled={!canAddExpense}
-              title={!canAddExpense ? 'Settlement marked as paid. Reset to pending to add expenses.' : undefined}
-              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${canAddExpense ? 'bg-primary text-darkBg hover:bg-primary/90' : 'bg-white/10 text-textSecondary cursor-not-allowed'}`}
+              title={
+                !canAddExpense
+                  ? "Settlement marked as paid. Reset to pending to add expenses."
+                  : undefined
+              }
+              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${canAddExpense ? "bg-primary text-darkBg hover:bg-primary/90" : "bg-white/10 text-textSecondary cursor-not-allowed"}`}
             >
               Add expense
             </button>
@@ -317,12 +393,34 @@ export default function GroupDetail() {
             >
               {shareCopied ? (
                 <>
-                  <svg className="w-5 h-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  <svg
+                    className="w-5 h-5 text-success"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
                   Link copied
                 </>
               ) : (
                 <>
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" /></svg>
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
+                    />
+                  </svg>
                   Share
                 </>
               )}
@@ -342,28 +440,58 @@ export default function GroupDetail() {
       {error && (
         <div className="p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-sm flex justify-between items-center">
           <span>{error}</span>
-          <button onClick={() => setError('')} className="text-danger/80 hover:text-danger">×</button>
+          <button
+            onClick={() => setError("")}
+            className="text-danger/80 hover:text-danger"
+          >
+            ×
+          </button>
         </div>
       )}
 
       {addMemberOpen && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setAddMemberOpen(false)}>
-          <div className="bg-surface rounded-2xl border border-white/10 p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-textPrimary mb-4">Add member</h2>
-            <p className="text-textSecondary text-sm mb-3">They must have signed up with this mobile number first.</p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          onClick={() => setAddMemberOpen(false)}
+        >
+          <div
+            className="bg-surface rounded-2xl border border-white/10 p-6 w-full max-w-sm shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-textPrimary mb-4">
+              Add member
+            </h2>
+            <p className="text-textSecondary text-sm mb-3">
+              They must have signed up with this mobile number first.
+            </p>
             <form onSubmit={handleAddMember}>
               <input
                 type="tel"
                 inputMode="numeric"
                 value={memberMobile}
-                onChange={(e) => setMemberMobile(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                onChange={(e) =>
+                  setMemberMobile(
+                    e.target.value.replace(/\D/g, "").slice(0, 15),
+                  )
+                }
                 placeholder="10-digit mobile number"
                 className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary mb-4"
                 maxLength={15}
               />
               <div className="flex gap-2">
-                <button type="button" onClick={() => setAddMemberOpen(false)} className="flex-1 py-2.5 rounded-lg border border-white/20 text-textSecondary">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-lg bg-primary text-darkBg font-semibold">Add</button>
+                <button
+                  type="button"
+                  onClick={() => setAddMemberOpen(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-white/20 text-textSecondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-lg bg-primary text-darkBg font-semibold"
+                >
+                  Add
+                </button>
               </div>
             </form>
           </div>
@@ -371,9 +499,17 @@ export default function GroupDetail() {
       )}
 
       {editNameOpen && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setEditNameOpen(false)}>
-          <div className="bg-surface rounded-2xl border border-white/10 p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-textPrimary mb-4">Edit group name</h2>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          onClick={() => setEditNameOpen(false)}
+        >
+          <div
+            className="bg-surface rounded-2xl border border-white/10 p-6 w-full max-w-sm shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-textPrimary mb-4">
+              Edit group name
+            </h2>
             <form onSubmit={handleEditGroupName}>
               <input
                 type="text"
@@ -384,8 +520,19 @@ export default function GroupDetail() {
                 required
               />
               <div className="flex gap-2">
-                <button type="button" onClick={() => setEditNameOpen(false)} className="flex-1 py-2.5 rounded-lg border border-white/20 text-textSecondary">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-lg bg-primary text-darkBg font-semibold">Save</button>
+                <button
+                  type="button"
+                  onClick={() => setEditNameOpen(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-white/20 text-textSecondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-lg bg-primary text-darkBg font-semibold"
+                >
+                  Save
+                </button>
               </div>
             </form>
           </div>
@@ -426,57 +573,101 @@ export default function GroupDetail() {
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Total expense</p>
               <p className="text-2xl font-bold text-textPrimary mt-1">
-                {balances?.totalExpense != null ? `₹${Number(balances.totalExpense).toFixed(2)}` : '—'}
+                {balances?.totalExpense != null
+                  ? `₹${Number(balances.totalExpense).toFixed(2)}`
+                  : "—"}
               </p>
               <p className="text-textSecondary text-xs mt-1">{displayMonth}</p>
             </div>
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Per person share</p>
               <p className="text-2xl font-bold text-primary mt-1">
-                {balances?.sharePerPerson != null ? `₹${Number(balances.sharePerPerson).toFixed(2)}` : '—'}
+                {balances?.sharePerPerson != null
+                  ? `₹${Number(balances.sharePerPerson).toFixed(2)}`
+                  : "—"}
               </p>
             </div>
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Contributions</p>
-              <p className="text-textPrimary text-sm mt-1 font-medium">See table below</p>
+              <p className="text-textPrimary text-sm mt-1 font-medium">
+                See table below
+              </p>
             </div>
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Settlement</p>
-              <p className="text-textPrimary text-sm mt-1 capitalize">{settlement?.status || 'pending'}</p>
+              <p className="text-textPrimary text-sm mt-1 capitalize">
+                {settlement?.status || "pending"}
+              </p>
             </div>
           </div>
 
           {balances && (
             <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
-              <h2 className="text-lg font-semibold text-textPrimary px-4 sm:px-5 py-4 border-b border-white/5">Balance (paid − share)</h2>
+              <h2 className="text-lg font-semibold text-textPrimary px-4 sm:px-5 py-4 border-b border-white/5">
+                Balance (paid − share)
+              </h2>
               <div className="overflow-x-auto -mx-2 sm:mx-0">
                 <table className="w-full min-w-[280px]">
                   <thead>
                     <tr className="border-b border-white/5">
-                      <th className="text-left text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">Member</th>
-                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">Paid</th>
-                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">Share</th>
-                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">Net</th>
+                      <th className="text-left text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        Member
+                      </th>
+                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        Paid
+                      </th>
+                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        Share
+                      </th>
+                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        Net
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(balances.balances || {}).map(([id, obj]) => {
-                      const b = typeof obj === 'object' && obj !== null && 'balance' in obj ? obj.balance : obj;
-                      let name = typeof obj === 'object' && obj !== null && obj.name ? obj.name : id;
-                      if (name && name.length === 24 && /^[a-f0-9]+$/i.test(name)) name = 'Member';
-                      const paid = balances.paidByUser?.[id] ?? 0;
-                      const share = balances.sharePerPerson ?? 0;
-                      return (
-                        <tr key={id} className="border-b border-white/5 last:border-0">
-                          <td className="px-3 sm:px-5 py-3 text-textPrimary font-medium">{name}</td>
-                          <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">₹{Number(paid).toFixed(2)}</td>
-                          <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">₹{Number(share).toFixed(2)}</td>
-                          <td className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${b > 0 ? 'text-success' : b < 0 ? 'text-danger' : 'text-textSecondary'}`}>
-                            {b > 0 ? '+' : ''}₹{Number(b).toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {Object.entries(balances.balances || {}).map(
+                      ([id, obj]) => {
+                        const b =
+                          typeof obj === "object" &&
+                          obj !== null &&
+                          "balance" in obj
+                            ? obj.balance
+                            : obj;
+                        let name =
+                          typeof obj === "object" && obj !== null && obj.name
+                            ? obj.name
+                            : id;
+                        if (
+                          name &&
+                          name.length === 24 &&
+                          /^[a-f0-9]+$/i.test(name)
+                        )
+                          name = "Member";
+                        const paid = balances.paidByUser?.[id] ?? 0;
+                        const share = balances.sharePerPerson ?? 0;
+                        return (
+                          <tr
+                            key={id}
+                            className="border-b border-white/5 last:border-0"
+                          >
+                            <td className="px-3 sm:px-5 py-3 text-textPrimary font-medium">
+                              {name}
+                            </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
+                              ₹{Number(paid).toFixed(2)}
+                            </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
+                              ₹{Number(share).toFixed(2)}
+                            </td>
+                            <td
+                              className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${b > 0 ? "text-success" : b < 0 ? "text-danger" : "text-textSecondary"}`}
+                            >
+                              {b > 0 ? "+" : ""}₹{Number(b).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      },
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -487,6 +678,13 @@ export default function GroupDetail() {
             settlement={settlement}
             onStatusChange={handleSettlementStatus}
             isAdmin={isAdmin}
+            groupId={groupId}
+            month={selectedMonth}
+            currentUserId={user?._id}
+            payments={payments}
+            onPaymentComplete={refresh}
+            onConfirmPayment={handleConfirmPayment}
+            onRejectPayment={handleRejectPayment}
           />
 
           {Array.isArray(expenses) && expenses.length > 0 && (
@@ -500,30 +698,118 @@ export default function GroupDetail() {
           )}
 
           <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
-            <h2 className="text-lg font-semibold text-textPrimary px-4 sm:px-5 py-4 border-b border-white/5">Expense ledger</h2>
+            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-white/5">
+              <h2 className="text-lg font-semibold text-textPrimary">
+                Expense ledger
+              </h2>
+              {canAddExpense && (
+                <button
+                  onClick={() => setAddExpenseOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-sm font-medium hover:bg-primary/30 flex items-center gap-1.5"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  Add
+                </button>
+              )}
+            </div>
             {!canAddExpense && (
               <p className="px-4 sm:px-5 py-3 text-warning/90 text-sm border-b border-white/5">
-                Settlement is marked as paid. Reset to pending (above) to add more expenses.
+                Settlement is marked as paid. Reset to pending (above) to add
+                more expenses.
               </p>
             )}
             {!Array.isArray(expenses) || expenses.length === 0 ? (
-              <p className="px-4 sm:px-5 py-8 text-textSecondary text-sm">
-                {canAddExpense ? 'No expenses this month. Tap Add expense to record one.' : 'No expenses this month.'}
-              </p>
+              <div className="px-4 sm:px-5 py-8 text-center">
+                <svg
+                  className="w-12 h-12 mx-auto text-textSecondary/50 mb-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"
+                  />
+                </svg>
+                <p className="text-textSecondary text-sm">
+                  {canAddExpense
+                    ? "No expenses this month."
+                    : "No expenses this month."}
+                </p>
+                {canAddExpense && (
+                  <button
+                    onClick={() => setAddExpenseOpen(true)}
+                    className="mt-3 px-4 py-2 rounded-lg bg-primary text-darkBg text-sm font-semibold hover:bg-primary/90"
+                  >
+                    Add first expense
+                  </button>
+                )}
+              </div>
             ) : (
               <ul className="divide-y divide-white/5">
                 {expenses.slice(0, 30).map((ex) => (
-                  <li key={ex._id} className="px-4 sm:px-5 py-3 sm:py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10 min-h-[52px]">
+                  <li
+                    key={ex._id}
+                    className="px-4 sm:px-5 py-3 sm:py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10 min-h-[52px]"
+                  >
                     <div className="flex-1 min-w-0">
-                      <span className="text-textPrimary font-medium block truncate">{ex.description}</span>
+                      <span className="text-textPrimary font-medium block truncate">
+                        {ex.description}
+                      </span>
                       <span className="text-textSecondary text-xs sm:text-sm">
-                        {ex.payer?.name ?? 'Unknown'} · {ex.category === 'Custom' && ex.customCategory ? ex.customCategory : ex.category} · {format(new Date(ex.date), 'dd MMM')}
+                        {ex.payer?.name ?? "Unknown"} ·{" "}
+                        {ex.category === "Custom" && ex.customCategory
+                          ? ex.customCategory
+                          : ex.category}{" "}
+                        · {format(new Date(ex.date), "dd MMM")}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-primary font-semibold">₹{Number(ex.amount).toFixed(2)}</span>
-                      <button type="button" onClick={() => setEditingExpense(ex)} className="min-h-[36px] min-w-[44px] px-2 rounded-lg text-textSecondary hover:text-primary hover:bg-white/5 text-sm touch-manipulation">Edit</button>
-                      <button type="button" onClick={() => handleDeleteExpense(ex._id)} className="min-h-[36px] min-w-[44px] px-2 rounded-lg text-danger hover:bg-danger/10 text-sm touch-manipulation">Del</button>
+                      <span className="text-primary font-semibold">
+                        ₹{Number(ex.amount).toFixed(2)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => canAddExpense && setEditingExpense(ex)}
+                        disabled={!canAddExpense}
+                        title={
+                          !canAddExpense
+                            ? "Can't edit - settlement is paid"
+                            : "Edit expense"
+                        }
+                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-textSecondary hover:text-primary hover:bg-white/5" : "text-textSecondary/40 cursor-not-allowed"}`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          canAddExpense && handleDeleteExpense(ex._id)
+                        }
+                        disabled={!canAddExpense}
+                        title={
+                          !canAddExpense
+                            ? "Can't delete - settlement is paid"
+                            : "Delete expense"
+                        }
+                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-danger hover:bg-danger/10" : "text-danger/40 cursor-not-allowed"}`}
+                      >
+                        Del
+                      </button>
                     </div>
                   </li>
                 ))}
@@ -533,21 +819,37 @@ export default function GroupDetail() {
 
           {isAdmin && (
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
-              <h2 className="text-lg font-semibold text-textPrimary mb-3">Members</h2>
+              <h2 className="text-lg font-semibold text-textPrimary mb-3">
+                Members
+              </h2>
               <ul className="space-y-2">
                 {group.members?.map((m) => {
                   const u = m.user;
                   const uid = u?._id || u;
                   const isSelf = uid?.toString() === user?._id;
                   return (
-                    <li key={uid} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+                    <li
+                      key={uid}
+                      className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
+                    >
                       <div>
                         <span className="text-textPrimary">{u?.name}</span>
-                        {m.role === 'admin' && <span className="ml-2 text-xs text-primary">Admin</span>}
-                        <span className="text-textSecondary text-sm block">{u?.email}</span>
+                        {m.role === "admin" && (
+                          <span className="ml-2 text-xs text-primary">
+                            Admin
+                          </span>
+                        )}
+                        <span className="text-textSecondary text-sm block">
+                          {u?.email}
+                        </span>
                       </div>
-                      {isAdmin && !isSelf && m.role !== 'admin' && (
-                        <button onClick={() => handleRemoveMember(uid)} className="text-danger text-sm hover:underline">Remove</button>
+                      {isAdmin && !isSelf && m.role !== "admin" && (
+                        <button
+                          onClick={() => handleRemoveMember(uid)}
+                          className="text-danger text-sm hover:underline"
+                        >
+                          Remove
+                        </button>
                       )}
                     </li>
                   );
@@ -564,10 +866,24 @@ export default function GroupDetail() {
           type="button"
           onClick={() => canAddExpense && setAddExpenseOpen(true)}
           disabled={!canAddExpense}
-          aria-label={canAddExpense ? 'Add expense' : 'Reset to pending to add expenses'}
-          className={`fixed bottom-6 right-6 w-14 h-14 sm:hidden rounded-full shadow-lg flex items-center justify-center touch-manipulation z-30 ${canAddExpense ? 'bg-primary text-darkBg shadow-primary/30 hover:bg-primary/90 active:scale-95' : 'bg-white/10 text-textSecondary cursor-not-allowed'}`}
+          aria-label={
+            canAddExpense ? "Add expense" : "Reset to pending to add expenses"
+          }
+          className={`fixed bottom-6 right-6 w-14 h-14 sm:hidden rounded-full shadow-lg flex items-center justify-center touch-manipulation z-30 ${canAddExpense ? "bg-primary text-darkBg shadow-primary/30 hover:bg-primary/90 active:scale-95" : "bg-white/10 text-textSecondary cursor-not-allowed"}`}
         >
-          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+          <svg
+            className="w-7 h-7"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
         </button>
       )}
     </div>

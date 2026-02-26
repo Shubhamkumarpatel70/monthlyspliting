@@ -1,79 +1,165 @@
-const API = '/api';
+const API = "/api";
 
 function getToken() {
-  return localStorage.getItem('token');
+  return localStorage.getItem("token");
 }
 
 export async function request(path, options = {}) {
-  const url = path.startsWith('http') ? path : `${API}${path}`;
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const url = path.startsWith("http") ? path : `${API}${path}`;
+  const headers = { "Content-Type": "application/json", ...options.headers };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(url, { ...options, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || res.statusText || 'Request failed');
+  if (!res.ok)
+    throw new Error(data.message || res.statusText || "Request failed");
   return data;
 }
 
 export const auth = {
-  signup: (name, email, password, mobile, otpCode, otpType) => request('/auth/signup', { method: 'POST', body: JSON.stringify({ name, email, password, mobile, otpCode, otpType }) }),
-  login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  loginMobile: (mobile, password) => request('/auth/login-mobile', { method: 'POST', body: JSON.stringify({ mobile, password }) }),
-  checkMobile: (mobile) => request(`/auth/check-mobile/${encodeURIComponent(mobile)}`),
-  me: () => request('/auth/me'),
-  sendOTP: (email, mobile, purpose, type) => request('/auth/send-otp', { method: 'POST', body: JSON.stringify({ email, mobile, purpose, type }) }),
-  verifyOTP: (email, mobile, code, purpose, type) => request('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, mobile, code, purpose, type }) }),
-  resendOTP: (email, mobile, purpose, type) => request('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email, mobile, purpose, type }) }),
+  signup: (name, email, password, mobile, otpCode, otpType) =>
+    request("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({ name, email, password, mobile, otpCode, otpType }),
+    }),
+  login: (email, password) =>
+    request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  loginMobile: (mobile, password) =>
+    request("/auth/login-mobile", {
+      method: "POST",
+      body: JSON.stringify({ mobile, password }),
+    }),
+  checkMobile: (mobile) =>
+    request(`/auth/check-mobile/${encodeURIComponent(mobile)}`),
+  me: () => request("/auth/me"),
+  sendOTP: (email, mobile, purpose, type) =>
+    request("/auth/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, mobile, purpose, type }),
+    }),
+  verifyOTP: (email, mobile, code, purpose, type) =>
+    request("/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, mobile, code, purpose, type }),
+    }),
+  resendOTP: (email, mobile, purpose, type) =>
+    request("/auth/resend-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, mobile, purpose, type }),
+    }),
 };
 
 export const groups = {
-  list: () => request('/groups'),
+  list: () => request("/groups"),
   get: (id) => request(`/groups/${id}`),
   joinInfo: (id) => request(`/groups/${id}/join-info`),
-  join: (id) => request(`/groups/${id}/join`, { method: 'POST' }),
-  create: (name) => request('/groups', { method: 'POST', body: JSON.stringify({ name }) }),
-  update: (id, data) => request(`/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (id) => request(`/groups/${id}`, { method: 'DELETE' }),
-  addMember: (id, mobile, email) => request(`/groups/${id}/members`, { method: 'POST', body: JSON.stringify(mobile != null ? { mobile } : { email }) }),
-  removeMember: (groupId, userId) => request(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }),
+  join: (id) => request(`/groups/${id}/join`, { method: "POST" }),
+  create: (name) =>
+    request("/groups", { method: "POST", body: JSON.stringify({ name }) }),
+  update: (id, data) =>
+    request(`/groups/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id) => request(`/groups/${id}`, { method: "DELETE" }),
+  addMember: (id, mobile, email) =>
+    request(`/groups/${id}/members`, {
+      method: "POST",
+      body: JSON.stringify(mobile != null ? { mobile } : { email }),
+    }),
+  removeMember: (groupId, userId) =>
+    request(`/groups/${groupId}/members/${userId}`, { method: "DELETE" }),
 };
 
 export const expenses = {
-  list: (groupId, month) => request(`/groups/${groupId}/expenses${month ? `?month=${encodeURIComponent(month)}` : ''}`),
+  list: (groupId, month) =>
+    request(
+      `/groups/${groupId}/expenses${month ? `?month=${encodeURIComponent(month)}` : ""}`,
+    ),
   months: (groupId) => request(`/groups/${groupId}/months`),
-  create: (groupId, data) => request(`/groups/${groupId}`, { method: 'POST', body: JSON.stringify(data) }),
-  update: (groupId, expenseId, data) => request(`/groups/${groupId}/expenses/${expenseId}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (groupId, expenseId) => request(`/groups/${groupId}/expenses/${expenseId}`, { method: 'DELETE' }),
-  balances: (groupId, month) => request(`/groups/${groupId}/balances?month=${encodeURIComponent(month)}`),
-  settlement: (groupId, month) => request(`/groups/${groupId}/settlement?month=${encodeURIComponent(month)}`),
-  settlementStatus: (groupId, month, status) => request(`/groups/${groupId}/settlement/status`, { method: 'PUT', body: JSON.stringify({ month, status }) }),
+  create: (groupId, data) =>
+    request(`/groups/${groupId}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (groupId, expenseId, data) =>
+    request(`/groups/${groupId}/expenses/${expenseId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  delete: (groupId, expenseId) =>
+    request(`/groups/${groupId}/expenses/${expenseId}`, { method: "DELETE" }),
+  balances: (groupId, month) =>
+    request(`/groups/${groupId}/balances?month=${encodeURIComponent(month)}`),
+  settlement: (groupId, month) =>
+    request(`/groups/${groupId}/settlement?month=${encodeURIComponent(month)}`),
+  settlementStatus: (groupId, month, status) =>
+    request(`/groups/${groupId}/settlement/status`, {
+      method: "PUT",
+      body: JSON.stringify({ month, status }),
+    }),
+};
+
+export const payments = {
+  list: (groupId, month) =>
+    request(
+      `/groups/${groupId}/payments${month ? `?month=${encodeURIComponent(month)}` : ""}`,
+    ),
+  create: (groupId, data) =>
+    request(`/groups/${groupId}/payments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  confirm: (groupId, paymentId) =>
+    request(`/groups/${groupId}/payments/${paymentId}/confirm`, {
+      method: "PUT",
+    }),
+  reject: (groupId, paymentId, reason) =>
+    request(`/groups/${groupId}/payments/${paymentId}/reject`, {
+      method: "PUT",
+      body: JSON.stringify({ reason }),
+    }),
+  getUpiId: (groupId, userId) =>
+    request(`/groups/${groupId}/payments/upi/${userId}`),
+  updateMyUpi: (upiId) =>
+    request("/payments/upi", {
+      method: "PUT",
+      body: JSON.stringify({ upiId }),
+    }),
+  getMyUpi: () => request("/payments/upi"),
 };
 
 export const admin = {
-  stats: () => request('/admin/stats'),
+  stats: () => request("/admin/stats"),
   getUsers: (params) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/admin/users${query ? `?${query}` : ''}`);
+    return request(`/admin/users${query ? `?${query}` : ""}`);
   },
   getUser: (id) => request(`/admin/users/${id}`),
-  updateUser: (id, data) => request(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  updateUser: (id, data) =>
+    request(`/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteUser: (id) => request(`/admin/users/${id}`, { method: "DELETE" }),
   getOTPs: (params) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/admin/otps${query ? `?${query}` : ''}`);
+    return request(`/admin/otps${query ? `?${query}` : ""}`);
   },
-  deleteOTP: (id) => request(`/admin/otps/${id}`, { method: 'DELETE' }),
+  deleteOTP: (id) => request(`/admin/otps/${id}`, { method: "DELETE" }),
   deleteOTPs: (params) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/admin/otps${query ? `?${query}` : ''}`, { method: 'DELETE' });
+    return request(`/admin/otps${query ? `?${query}` : ""}`, {
+      method: "DELETE",
+    });
   },
   getGroups: (params) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/admin/groups${query ? `?${query}` : ''}`);
+    return request(`/admin/groups${query ? `?${query}` : ""}`);
   },
-  deleteGroup: (id) => request(`/admin/groups/${id}`, { method: 'DELETE' }),
+  deleteGroup: (id) => request(`/admin/groups/${id}`, { method: "DELETE" }),
   getExpenses: (params) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/admin/expenses${query ? `?${query}` : ''}`);
+    return request(`/admin/expenses${query ? `?${query}` : ""}`);
   },
 };

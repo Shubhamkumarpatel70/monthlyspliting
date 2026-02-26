@@ -17,6 +17,7 @@ export default function PaymentModal({
   const [receiverUpi, setReceiverUpi] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showQR, setShowQR] = useState(false);
 
   const fromId = transaction?.from?._id || transaction?.from;
   const toId = transaction?.to?._id || transaction?.to;
@@ -63,6 +64,13 @@ export default function PaymentModal({
       tn: `Monthly Split - ${month}`,
     });
     return `upi://pay?${params.toString()}`;
+  };
+
+  const generateQRCodeUrl = () => {
+    const upiLink = generateUpiLink();
+    if (!upiLink) return null;
+    // Use a QR code API service to generate the QR code
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiLink)}`;
   };
 
   const openUpiApp = () => {
@@ -113,6 +121,7 @@ export default function PaymentModal({
     setTransactionId("");
     setNotes("");
     setError("");
+    setShowQR(false);
     onClose();
   };
 
@@ -308,6 +317,61 @@ export default function PaymentModal({
                     </p>
                   </div>
 
+                  {/* Scan & Pay QR Code */}
+                  {showQR ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-textPrimary font-medium">
+                          Scan & Pay
+                        </p>
+                        <button
+                          onClick={() => setShowQR(false)}
+                          className="text-textSecondary hover:text-primary text-sm"
+                        >
+                          Hide QR
+                        </button>
+                      </div>
+                      <div className="flex flex-col items-center p-4 bg-white rounded-xl">
+                        <img
+                          src={generateQRCodeUrl()}
+                          alt="UPI QR Code"
+                          className="w-48 h-48"
+                        />
+                        <p className="mt-2 text-gray-600 text-sm font-medium">
+                          ₹{amount}
+                        </p>
+                      </div>
+                      <p className="text-textSecondary text-xs text-center">
+                        Scan this QR code with any UPI app (GPay, PhonePe,
+                        Paytm, etc.)
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowQR(true)}
+                      className="w-full py-3 px-4 rounded-xl bg-surface border-2 border-dashed border-primary/50 text-primary font-medium hover:bg-primary/10 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+                        />
+                      </svg>
+                      Scan & Pay (Show QR Code)
+                    </button>
+                  )}
+
+                  <div className="text-center text-textSecondary text-sm">
+                    <p>— OR —</p>
+                  </div>
+
                   {/* UPI Deep Link Button */}
                   <button
                     onClick={() => {
@@ -330,11 +394,6 @@ export default function PaymentModal({
                     </svg>
                     Open UPI App to Pay ₹{amount}
                   </button>
-
-                  <div className="text-center text-textSecondary text-sm">
-                    <p>— OR —</p>
-                    <p className="mt-1">Copy UPI ID and pay manually</p>
-                  </div>
 
                   <button
                     onClick={() => {

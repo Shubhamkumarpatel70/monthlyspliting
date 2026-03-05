@@ -18,7 +18,10 @@ export function AuthProvider({ children }) {
       .me()
       .then((data) => {
         setUser(data);
-        // Don't show prompt on page load, only after fresh login
+        // Show MPIN setup prompt for existing users who don't have MPIN
+        if (data.hasMpin === false) {
+          setShowMpinSetup(true);
+        }
       })
       .catch(() => localStorage.removeItem("token"))
       .finally(() => setLoading(false));

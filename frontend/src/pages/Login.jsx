@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { auth as authApi } from "../api";
@@ -21,6 +21,16 @@ export default function Login() {
   const [newMpinDigits, setNewMpinDigits] = useState(["", "", "", ""]);
   const [mpinSaving, setMpinSaving] = useState(false);
   const [mpinError, setMpinError] = useState("");
+
+  // Focus first MPIN input when popup opens
+  useEffect(() => {
+    if (showMpinPopup) {
+      setTimeout(() => {
+        const firstInput = document.getElementById("new-mpin-0");
+        if (firstInput) firstInput.focus();
+      }, 100);
+    }
+  }, [showMpinPopup]);
 
   // Forgot password states
   const [forgotMode, setForgotMode] = useState(false);
@@ -51,9 +61,11 @@ export default function Login() {
         navigate(returnUrl || "/dashboard", { replace: true });
       } else {
         result = await login(email, password);
-        // Check if user needs to set MPIN
-        if (!result.hasMpin) {
+        // Check if user needs to set MPIN (explicitly check for false, not just falsy)
+        if (result.hasMpin === false || result.hasMpin === undefined) {
+          setLoading(false); // Ensure loading is false before showing popup
           setShowMpinPopup(true);
+          return; // Exit early to prevent finally block from interfering
         } else {
           navigate(returnUrl || "/dashboard", { replace: true });
         }

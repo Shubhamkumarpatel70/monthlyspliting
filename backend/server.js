@@ -9,6 +9,7 @@ import groupRoutes from "./routes/groups.js";
 import expenseRoutes from "./routes/expenses.js";
 import adminRoutes from "./routes/admin.js";
 import paymentRoutes from "./routes/payments.js";
+import advanceRoutes from "./routes/advances.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 5000;
@@ -23,6 +24,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/groups", expenseRoutes);
 app.use("/api/groups", paymentRoutes);
+app.use("/api/groups", advanceRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
 

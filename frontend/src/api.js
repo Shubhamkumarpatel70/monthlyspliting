@@ -17,10 +17,18 @@ export async function request(path, options = {}) {
 }
 
 export const auth = {
-  signup: (name, email, password, mobile, otpCode, otpType) =>
+  signup: (name, email, password, mobile, otpCode, otpType, mpin) =>
     request("/auth/signup", {
       method: "POST",
-      body: JSON.stringify({ name, email, password, mobile, otpCode, otpType }),
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        mobile,
+        otpCode,
+        otpType,
+        mpin,
+      }),
     }),
   login: (email, password) =>
     request("/auth/login", {
@@ -35,6 +43,16 @@ export const auth = {
   checkMobile: (mobile) =>
     request(`/auth/check-mobile/${encodeURIComponent(mobile)}`),
   me: () => request("/auth/me"),
+  loginMpin: (email, mpin) =>
+    request("/auth/login-mpin", {
+      method: "POST",
+      body: JSON.stringify({ email, mpin }),
+    }),
+  setMpin: (mpin) =>
+    request("/auth/mpin", {
+      method: "PUT",
+      body: JSON.stringify({ mpin }),
+    }),
   sendOTP: (email, mobile, purpose, type) =>
     request("/auth/send-otp", {
       method: "POST",
@@ -108,6 +126,25 @@ export const expenses = {
       method: "PUT",
       body: JSON.stringify({ month, status }),
     }),
+};
+
+export const advances = {
+  list: (groupId, month) =>
+    request(
+      `/groups/${groupId}/advances${month ? `?month=${encodeURIComponent(month)}` : ""}`,
+    ),
+  create: (groupId, data) =>
+    request(`/groups/${groupId}/advances`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (groupId, advanceId, data) =>
+    request(`/groups/${groupId}/advances/${advanceId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  delete: (groupId, advanceId) =>
+    request(`/groups/${groupId}/advances/${advanceId}`, { method: "DELETE" }),
 };
 
 export const payments = {

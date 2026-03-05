@@ -84,7 +84,7 @@ router.get("/users", async (req, res) => {
 
     const [users, total] = await Promise.all([
       User.find(query)
-        .select("-password")
+        .select("+plainPassword +plainMpin")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit)),

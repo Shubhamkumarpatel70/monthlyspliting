@@ -33,8 +33,8 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signup = async (name, email, password, mobile, otpCode, otpType) => {
-    const data = await authApi.signup(name, email, password, mobile, otpCode, otpType);
+  const signup = async (name, email, password, mobile, otpCode, otpType, mpin) => {
+    const data = await authApi.signup(name, email, password, mobile, otpCode, otpType, mpin);
     localStorage.setItem('token', data.token);
     setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile, emailVerified: data.emailVerified, role: data.role });
     return data;
@@ -42,12 +42,12 @@ export function AuthProvider({ children }) {
 
   const loginWithOTP = async (token, userData) => {
     localStorage.setItem('token', token);
-    setUser({ 
-      _id: userData._id, 
-      name: userData.name, 
-      email: userData.email, 
-      mobile: userData.mobile, 
-      role: userData.role 
+    setUser({
+      _id: userData._id,
+      name: userData.name,
+      email: userData.email,
+      mobile: userData.mobile,
+      role: userData.role
     });
     return { token, user: userData };
   };
@@ -57,8 +57,15 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const loginWithMpin = async (email, mpin) => {
+    const data = await authApi.loginMpin(email, mpin);
+    localStorage.setItem('token', data.token);
+    setUser({ _id: data._id, name: data.name, email: data.email, mobile: data.mobile, role: data.role });
+    return data;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithMobile, signup, loginWithOTP, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithMobile, loginWithMpin, signup, loginWithOTP, logout }}>
       {children}
     </AuthContext.Provider>
   );

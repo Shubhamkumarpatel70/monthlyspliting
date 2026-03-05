@@ -1,5 +1,6 @@
 import express from 'express';
 import Expense, { EXPENSE_CATEGORIES } from '../models/Expense.js';
+import Advance from '../models/Advance.js';
 import Settlement from '../models/Settlement.js';
 import { protect, groupMember } from '../middleware/auth.js';
 import { computeMonthlyBalances, getMonthFromDate } from '../utils/balanceCalculator.js';
@@ -79,10 +80,12 @@ router.get('/:groupId/balances', groupMember, async (req, res) => {
   try {
     const { month } = req.query;
     if (!month) return res.status(400).json({ message: 'Month (YYYY-MM) required' });
-    const expenses = await Expense.find({ group: req.params.groupId, month })
-      .populate('payer', 'name');
+    const [expenses, advances] = await Promise.all([
+      Expense.find({ group: req.params.groupId, month }).populate('payer', 'name'),
+      Advance.find({ group: req.params.groupId, month }),
+    ]);
     const memberIds = req.group.members.map(m => m.user._id || m.user);
-    const result = computeMonthlyBalances(expenses, memberIds);
+    const result = computeMonthlyBalances(expenses, memberIds, advances);
     const userMap = new Map();
     req.group.members.forEach(m => {
       const u = m.user;
@@ -108,9 +111,12 @@ router.get('/:groupId/settlement', groupMember, async (req, res) => {
     let settlement = await Settlement.findOne({ group: req.params.groupId, month })
       .populate('transactions.from', 'name')
       .populate('transactions.to', 'name');
-    const expenses = await Expense.find({ group: req.params.groupId, month }).populate('payer', 'name');
+    const [expenses, advances] = await Promise.all([
+      Expense.find({ group: req.params.groupId, month }).populate('payer', 'name'),
+      Advance.find({ group: req.params.groupId, month }),
+    ]);
     const memberIds = req.group.members.map(m => m.user._id || m.user);
-    const { balances } = computeMonthlyBalances(expenses, memberIds);
+    const { balances } = computeMonthlyBalances(expenses, memberIds, advances);
     const userMap = new Map();
     req.group.members.forEach(m => {
       const u = m.user;
@@ -204,6 +210,64 @@ router.delete('/:groupId/expenses/:expenseId', groupMember, async (req, res) => 
     res.json({ message: 'Expense deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to delete expense' });
+  }
+});
+
+// Export monthly report as CSV
+router.get('/:groupId/export', groupMember, async (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month) return res.status(400).json({ message: 'Month (YYYY-MM) required' });
+    const [expenses, advances] = await Promise.all([
+      Expense.find({ group: req.params.groupId, month }).populate('payer', 'name').sort({ date: 1 }),
+      Advance.find({ group: req.params.groupId, month }),
+    ]);
+    const memberIds = req.group.members.map(m => m.user._id || m.user);
+    const result = computeMonthlyBalances(expenses, memberIds, advances);
+    const userMap = new Map();
+    req.group.members.forEach(m => {
+      const u = m.user;
+      const id = u._id?.toString() ?? u?.toString();
+      if (id) userMap.set(id, u.name || id);
+    });
+    const rows = [];
+    rows.push('Monthly Report - ' + month);
+    rows.push('');
+    rows.push('EXPENSES');
+    rows.push('Date,Description,Category,Paid By,Amount');
+    expenses.forEach(e => {
+      const d = new Date(e.date).toLocaleDateString();
+      const cat = e.category === 'Custom' && e.customCategory ? e.customCategory : e.category;
+      const desc = (e.description || '').replace(/"/g, '""');
+      rows.push(d + ',"' + desc + '",' + cat + ',' + (e.payer?.name || 'Unknown') + ',' + e.amount.toFixed(2));
+    });
+    rows.push('');
+    rows.push('ADVANCES');
+    rows.push('Payer,Amount,Description');
+    advances.forEach(a => {
+      const name = userMap.get(a.user?.toString()) || 'Unknown';
+      const desc = (a.description || '').replace(/"/g, '""');
+      rows.push(name + ',' + a.amount.toFixed(2) + ',"' + desc + '"');
+    });
+    rows.push('');
+    rows.push('SUMMARY');
+    rows.push('Total Expenses,' + result.totalExpense.toFixed(2));
+    rows.push('Total Advances,' + result.totalAdvance.toFixed(2));
+    rows.push('Total Pool,' + (result.totalExpense + result.totalAdvance).toFixed(2));
+    rows.push('Per Person Share,' + result.sharePerPerson.toFixed(2));
+    rows.push('');
+    rows.push('BALANCES');
+    rows.push('Member,Paid,Share,Balance');
+    Object.entries(result.balances).forEach(([id, bal]) => {
+      const name = userMap.get(id) || id;
+      const paid = result.paidByUser[id] || 0;
+      rows.push(name + ',' + paid.toFixed(2) + ',' + result.sharePerPerson.toFixed(2) + ',' + bal.toFixed(2));
+    });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="report-' + month + '.csv"');
+    res.send(rows.join('\r\n'));
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to export report' });
   }
 });
 

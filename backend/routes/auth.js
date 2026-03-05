@@ -83,12 +83,17 @@ router.post("/signup", async (req, res) => {
           .status(400)
           .json({ message: "Mobile number already registered" });
     }
+    const mpin = req.body.mpin;
+    if (mpin && (!/^\d{4}$/.test(mpin))) {
+      return res.status(400).json({ message: 'MPIN must be exactly 4 digits' });
+    }
     const user = await User.create({
       name: name.trim(),
       email: emailLower,
       password,
       emailVerified: !!otpCode, // Mark as verified if OTP was provided
       ...(mobileTrim && { mobile: mobileTrim }),
+      ...(mpin && { mpin }),
     });
     const token = generateToken(user._id);
     res.status(201).json({
@@ -126,6 +131,34 @@ router.post("/login", async (req, res) => {
     const match = await user.comparePassword(password);
     if (!match)
       return res.status(401).json({ message: "Invalid email or password" });
+    const token = generateToken(user._id);
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      token,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message || "Login failed" });
+  }
+});
+
+// Login with MPIN
+router.post("/login-mpin", async (req, res) => {
+  try {
+    const { email, mpin } = req.body;
+    if (!email || !mpin) {
+      return res.status(400).json({ message: "Email and MPIN required" });
+    }
+    if (!/^\d{4}$/.test(mpin)) {
+      return res.status(400).json({ message: "MPIN must be 4 digits" });
+    }
+    const user = await User.findOne({ email: email.toLowerCase() }).select("+mpin");
+    if (!user) return res.status(401).json({ message: "Invalid email or MPIN" });
+    if (!user.mpin) return res.status(400).json({ message: "MPIN not set. Please login with password." });
+    const match = await user.compareMpin(mpin);
+    if (!match) return res.status(401).json({ message: "Invalid email or MPIN" });
     const token = generateToken(user._id);
     res.json({
       _id: user._id,
@@ -577,7 +610,7 @@ router.post("/forgot-password/reset", async (req, res) => {
         .json({ message: "Password must be at least 6 characters" });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select("+password");
     if (!user) {
       return res
         .status(404)
@@ -593,6 +626,23 @@ router.post("/forgot-password/reset", async (req, res) => {
     res
       .status(500)
       .json({ message: err.message || "Failed to reset password" });
+  }
+});
+
+// Set/Update MPIN (authenticated)
+router.put("/mpin", protect, async (req, res) => {
+  try {
+    const { mpin } = req.body;
+    if (!mpin || !/^\d{4}$/.test(mpin)) {
+      return res.status(400).json({ message: "MPIN must be exactly 4 digits" });
+    }
+    const user = await User.findById(req.user._id).select("+mpin");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    user.mpin = mpin;
+    await user.save();
+    res.json({ message: "MPIN updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message || "Failed to update MPIN" });
   }
 });
 

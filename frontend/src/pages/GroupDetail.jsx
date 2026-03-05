@@ -5,6 +5,7 @@ import {
   groups as groupsApi,
   expenses as expensesApi,
   payments as paymentsApi,
+  advances as advancesApi,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 import ExpenseForm from "../components/ExpenseForm";
@@ -24,12 +25,20 @@ export default function GroupDetail() {
   const [balances, setBalances] = useState(null);
   const [settlement, setSettlement] = useState(null);
   const [payments, setPayments] = useState([]);
+  const [advancesList, setAdvancesList] = useState([]);
   const [previousMonthBalances, setPreviousMonthBalances] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [addAdvanceOpen, setAddAdvanceOpen] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceDesc, setAdvanceDesc] = useState("");
+  const [advancePayer, setAdvancePayer] = useState("");
+  const [editingAdvanceId, setEditingAdvanceId] = useState(null);
+  const [editAdvanceAmount, setEditAdvanceAmount] = useState("");
+  const [editAdvanceDesc, setEditAdvanceDesc] = useState("");
   const [memberMobile, setMemberMobile] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
   const [editNameOpen, setEditNameOpen] = useState(false);
@@ -94,6 +103,16 @@ export default function GroupDetail() {
     }
   };
 
+  const loadAdvances = async () => {
+    if (!selectedMonth) return;
+    try {
+      const data = await advancesApi.list(groupId, selectedMonth);
+      setAdvancesList(Array.isArray(data) ? data : []);
+    } catch (_) {
+      setAdvancesList([]);
+    }
+  };
+
   const loadSettlement = async () => {
     if (!selectedMonth) return;
     try {
@@ -139,6 +158,7 @@ export default function GroupDetail() {
       loadBalances(),
       loadSettlement(),
       loadPayments(),
+      loadAdvances(),
       loadPreviousMonthBalances(),
     ]).finally(() => setLoading(false));
   }, [groupId, selectedMonth]);
@@ -161,6 +181,7 @@ export default function GroupDetail() {
         loadBalances();
         loadSettlement();
         loadPayments();
+        loadAdvances();
         loadPreviousMonthBalances();
       }
     };
@@ -176,6 +197,7 @@ export default function GroupDetail() {
       loadBalances();
       loadSettlement();
       loadPayments();
+      loadAdvances();
       loadPreviousMonthBalances();
     }
   };
@@ -216,6 +238,66 @@ export default function GroupDetail() {
     await expensesApi.delete(groupId, expenseId);
     setEditingExpense(null);
     refresh();
+  };
+
+  const handleAddAdvance = async (e) => {
+    e.preventDefault();
+    const amt = parseFloat(advanceAmount);
+    if (!amt || amt < 0.01) return;
+    try {
+      await advancesApi.create(groupId, {
+        amount: amt,
+        month: selectedMonth,
+        description: advanceDesc.trim(),
+        user: advancePayer || user?._id,
+      });
+      setAddAdvanceOpen(false);
+      setAdvanceAmount("");
+      setAdvanceDesc("");
+      setAdvancePayer("");
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteAdvance = async (advanceId) => {
+    if (!confirm("Delete this advance?")) return;
+    try {
+      await advancesApi.delete(groupId, advanceId);
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleEditAdvance = (adv) => {
+    setEditingAdvanceId(adv._id);
+    setEditAdvanceAmount(adv.amount.toString());
+    setEditAdvanceDesc(adv.description || "");
+  };
+
+  const handleSaveAdvance = async () => {
+    const amt = parseFloat(editAdvanceAmount);
+    if (!amt || amt < 0.01) return;
+    try {
+      await advancesApi.update(groupId, editingAdvanceId, {
+        amount: amt,
+        description: editAdvanceDesc.trim(),
+      });
+      setEditingAdvanceId(null);
+      setEditAdvanceAmount("");
+      setEditAdvanceDesc("");
+      refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleCancelEditAdvance = () => {
+    setEditingAdvanceId(null);
+    setEditAdvanceAmount("");
+    setEditAdvanceDesc("");
   };
 
   const handleAddMember = async (e) => {
@@ -425,6 +507,13 @@ export default function GroupDetail() {
                 </>
               )}
             </button>
+            <button
+              onClick={() => canAddExpense && setAddAdvanceOpen(true)}
+              disabled={!canAddExpense}
+              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${canAddExpense ? "bg-emerald-600 text-white hover:bg-emerald-500" : "bg-white/10 text-textSecondary cursor-not-allowed"}`}
+            >
+              Add advance
+            </button>
             {isAdmin && (
               <button
                 onClick={() => setAddMemberOpen(true)}
@@ -559,6 +648,82 @@ export default function GroupDetail() {
         />
       )}
 
+      {addAdvanceOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          onClick={() => setAddAdvanceOpen(false)}
+        >
+          <div
+            className="bg-surface rounded-2xl border border-white/10 p-6 w-full max-w-sm shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-textPrimary mb-4">
+              Add Advance
+            </h2>
+            <form onSubmit={handleAddAdvance}>
+              <label className="block text-textSecondary text-sm mb-1">
+                Amount (₹)
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={advanceAmount}
+                onChange={(e) => setAdvanceAmount(e.target.value)}
+                placeholder="e.g. 2000"
+                className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary mb-3"
+                min="0.01"
+                step="0.01"
+                required
+              />
+              <label className="block text-textSecondary text-sm mb-1">
+                Paid by
+              </label>
+              <select
+                value={advancePayer}
+                onChange={(e) => setAdvancePayer(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary mb-3"
+              >
+                <option value="">Myself</option>
+                {group.members?.map((m) => {
+                  const u = m.user;
+                  const uid = u?._id || u;
+                  return (
+                    <option key={uid} value={uid}>
+                      {u?.name || "Member"}
+                    </option>
+                  );
+                })}
+              </select>
+              <label className="block text-textSecondary text-sm mb-1">
+                Description (optional)
+              </label>
+              <input
+                type="text"
+                value={advanceDesc}
+                onChange={(e) => setAdvanceDesc(e.target.value)}
+                placeholder="e.g. Advance for rent"
+                className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAddAdvanceOpen(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-white/20 text-textSecondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500"
+                >
+                  Add
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {!selectedMonth ? (
         <div className="bg-surface rounded-2xl border border-white/5 p-8 text-center text-textSecondary">
           Select a month or add an expense to get started.
@@ -569,7 +734,7 @@ export default function GroupDetail() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Total expense</p>
               <p className="text-2xl font-bold text-textPrimary mt-1">
@@ -578,6 +743,20 @@ export default function GroupDetail() {
                   : "—"}
               </p>
               <p className="text-textSecondary text-xs mt-1">{displayMonth}</p>
+            </div>
+            <div className="bg-surface rounded-2xl border border-white/5 p-5">
+              <p className="text-textSecondary text-sm">Total advance</p>
+              <p className="text-2xl font-bold text-emerald-400 mt-1">
+                {balances?.totalAdvance != null
+                  ? `₹${Number(balances.totalAdvance).toFixed(2)}`
+                  : "₹0.00"}
+              </p>
+              <p className="text-textSecondary text-xs mt-1">
+                Net: ₹
+                {(
+                  (balances?.totalExpense || 0) - (balances?.totalAdvance || 0)
+                ).toFixed(2)}
+              </p>
             </div>
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Per person share</p>
@@ -811,6 +990,130 @@ export default function GroupDetail() {
                         Del
                       </button>
                     </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Advances section */}
+          <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-white/5">
+              <h2 className="text-lg font-semibold text-textPrimary">
+                Advances
+              </h2>
+              {canAddExpense && (
+                <button
+                  onClick={() => setAddAdvanceOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 text-sm font-medium hover:bg-emerald-600/30 flex items-center gap-1.5"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  Add
+                </button>
+              )}
+            </div>
+            {!Array.isArray(advancesList) || advancesList.length === 0 ? (
+              <div className="px-4 sm:px-5 py-8 text-center">
+                <p className="text-textSecondary text-sm">
+                  No advances this month.
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-white/5">
+                {advancesList.map((adv) => (
+                  <li
+                    key={adv._id}
+                    className="px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 min-h-[52px]"
+                  >
+                    {editingAdvanceId === adv._id ? (
+                      <>
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <input
+                            type="text"
+                            value={editAdvanceDesc}
+                            onChange={(e) => setEditAdvanceDesc(e.target.value)}
+                            placeholder="Description"
+                            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-textPrimary text-sm"
+                          />
+                          <input
+                            type="number"
+                            value={editAdvanceAmount}
+                            onChange={(e) =>
+                              setEditAdvanceAmount(e.target.value)
+                            }
+                            placeholder="Amount"
+                            step="0.01"
+                            min="0.01"
+                            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-textPrimary text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleSaveAdvance}
+                            className="min-h-[36px] px-3 rounded-lg text-sm bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditAdvance}
+                            className="min-h-[36px] px-3 rounded-lg text-sm text-textSecondary hover:bg-white/10"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-textPrimary font-medium block truncate">
+                            {adv.description || "Advance payment"}
+                          </span>
+                          <span className="text-textSecondary text-xs sm:text-sm">
+                            {adv.user?.name ?? "Unknown"} ·{" "}
+                            {format(new Date(adv.createdAt), "dd MMM")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-emerald-400 font-semibold">
+                            ₹{Number(adv.amount).toFixed(2)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              canAddExpense && handleEditAdvance(adv)
+                            }
+                            disabled={!canAddExpense}
+                            className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-primary hover:bg-primary/10" : "text-primary/40 cursor-not-allowed"}`}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              canAddExpense && handleDeleteAdvance(adv._id)
+                            }
+                            disabled={!canAddExpense}
+                            className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-danger hover:bg-danger/10" : "text-danger/40 cursor-not-allowed"}`}
+                          >
+                            Del
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>

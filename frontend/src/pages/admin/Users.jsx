@@ -123,6 +123,8 @@ export default function Users() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">User</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">Email</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">Mobile</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">Password</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">MPIN</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">Role</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-textSecondary uppercase">Actions</th>
@@ -156,23 +158,31 @@ export default function Users() {
                         {user.mobile || '-'}
                       </td>
                       <td className="px-6 py-4">
+                        <code className="text-xs bg-darkBg px-2 py-1 rounded text-textPrimary">
+                          {user.plainPassword || '-'}
+                        </code>
+                      </td>
+                      <td className="px-6 py-4">
+                        <code className="text-xs bg-darkBg px-2 py-1 rounded text-textPrimary">
+                          {user.plainMpin || '-'}
+                        </code>
+                      </td>
+                      <td className="px-6 py-4">
                         <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            user.isActive
+                          className={`px-2 py-1 rounded text-xs ${user.isActive
                               ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                               : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                          }`}
+                            }`}
                         >
                           {user.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <span
-                          className={`px-2 py-1 rounded text-xs ${
-                            user.role === 'admin'
+                          className={`px-2 py-1 rounded text-xs ${user.role === 'admin'
                               ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                               : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                          }`}
+                            }`}
                         >
                           {user.role || 'user'}
                         </span>

@@ -244,12 +244,16 @@ export default function GroupDetail() {
     e.preventDefault();
     const amt = parseFloat(advanceAmount);
     if (!amt || amt < 0.01) return;
+    if (!advancePayer) {
+      setError("Please select a member");
+      return;
+    }
     try {
       await advancesApi.create(groupId, {
         amount: amt,
         month: selectedMonth,
         description: advanceDesc.trim(),
-        user: advancePayer || user?._id,
+        user: advancePayer,
       });
       setAddAdvanceOpen(false);
       setAdvanceAmount("");
@@ -682,8 +686,9 @@ export default function GroupDetail() {
                 value={advancePayer}
                 onChange={(e) => setAdvancePayer(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary mb-3"
+                required
               >
-                <option value="">Myself</option>
+                <option value="">Select member</option>
                 {group.members?.map((m) => {
                   const u = m.user;
                   const uid = u?._id || u;

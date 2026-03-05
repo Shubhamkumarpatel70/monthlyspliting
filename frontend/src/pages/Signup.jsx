@@ -1,79 +1,102 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { auth as authApi } from '../api';
-import OTPVerification from '../components/OTPVerification';
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { auth as authApi } from "../api";
+import OTPVerification from "../components/OTPVerification";
 
 export default function Signup() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl') || '';
-  const mobileParam = searchParams.get('mobile') || '';
+  const returnUrl = searchParams.get("returnUrl") || "";
+  const mobileParam = searchParams.get("mobile") || "";
   const { signup } = useAuth();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState(location.state?.email || "");
   const [mobile, setMobile] = useState(mobileParam);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [mpinValue, setMpinValue] = useState('');
-  const [error, setError] = useState('');
+  const [mpinValue, setMpinValue] = useState("");
+  const [error, setError] = useState("");
+  const [infoMessage, setInfoMessage] = useState(location.state?.message || "");
   const [loading, setLoading] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
   const [sendingOTP, setSendingOTP] = useState(false);
-  const [otpType, setOtpType] = useState('mobile');
-  const [whatsappLink, setWhatsappLink] = useState('');
+  const [otpType, setOtpType] = useState("mobile");
+  const [whatsappLink, setWhatsappLink] = useState("");
 
   useEffect(() => {
     if (mobileParam) setMobile(mobileParam);
   }, [mobileParam]);
 
+  // Clear info message after 5 seconds
+  useEffect(() => {
+    if (infoMessage) {
+      const timer = setTimeout(() => setInfoMessage(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [infoMessage]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
 
     // Validate form
     if (!name?.trim() || !email?.trim() || !password) {
-      setError('Please fill in all required fields');
+      setError("Please fill in all required fields");
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError("Password must be at least 6 characters");
       return;
     }
 
     // Determine OTP type based on mobile availability
     const mobileTrim = mobile.trim();
     const useMobileOTP = mobileTrim && mobileTrim.length >= 10;
-    const selectedOtpType = useMobileOTP ? 'mobile' : 'email';
+    const selectedOtpType = useMobileOTP ? "mobile" : "email";
     setOtpType(selectedOtpType);
 
     // Send OTP first
     setSendingOTP(true);
     try {
-      if (selectedOtpType === 'mobile') {
-        const result = await authApi.sendOTP(null, mobileTrim, 'signup', 'mobile');
+      if (selectedOtpType === "mobile") {
+        const result = await authApi.sendOTP(
+          null,
+          mobileTrim,
+          "signup",
+          "mobile",
+        );
         // Store WhatsApp link if provided (only present if SMS service not configured)
-        setWhatsappLink(result.whatsappLink || '');
+        setWhatsappLink(result.whatsappLink || "");
       } else {
-        await authApi.sendOTP(email.trim(), null, 'signup', 'email');
+        await authApi.sendOTP(email.trim(), null, "signup", "email");
       }
       setShowOTP(true);
     } catch (err) {
-      setError(err.message || 'Failed to send verification code');
+      setError(err.message || "Failed to send verification code");
     } finally {
       setSendingOTP(false);
     }
   };
 
   const handleOTPVerified = async (otpCode) => {
-    setError('');
+    setError("");
     setLoading(true);
     try {
-      await signup(name, email, password, mobile.trim() || undefined, otpCode, otpType, mpinValue || undefined);
-      navigate(returnUrl || '/dashboard', { replace: true });
+      await signup(
+        name,
+        email,
+        password,
+        mobile.trim() || undefined,
+        otpCode,
+        otpType,
+        mpinValue || undefined,
+      );
+      navigate(returnUrl || "/dashboard", { replace: true });
     } catch (err) {
-      setError(err.message || 'Signup failed');
+      setError(err.message || "Signup failed");
       setShowOTP(false); // Go back to form on error
     } finally {
       setLoading(false);
@@ -82,7 +105,7 @@ export default function Signup() {
 
   const handleCancelOTP = () => {
     setShowOTP(false);
-    setError('');
+    setError("");
   };
 
   if (showOTP) {
@@ -91,12 +114,25 @@ export default function Signup() {
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="w-14 h-14 mx-auto rounded-xl bg-surface border border-primary/30 flex items-center justify-center mb-4">
-              <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              <svg
+                className="w-7 h-7 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+                />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-textPrimary">Verify your account</h1>
-            <p className="text-textSecondary text-sm mt-1">Check your inbox for the code</p>
+            <h1 className="text-2xl font-bold text-textPrimary">
+              Verify your account
+            </h1>
+            <p className="text-textSecondary text-sm mt-1">
+              Check your inbox for the code
+            </p>
           </div>
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">
@@ -125,7 +161,9 @@ export default function Signup() {
           <button
             type="button"
             onClick={() => {
-              const query = returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : '';
+              const query = returnUrl
+                ? `?returnUrl=${encodeURIComponent(returnUrl)}`
+                : "";
               navigate(`/login${query}`);
             }}
             className="flex-1 py-2 rounded-lg text-sm font-medium text-textSecondary hover:text-textPrimary hover:bg-white/5 transition"
@@ -141,18 +179,41 @@ export default function Signup() {
         </div>
         <div className="text-center mb-8">
           <div className="w-14 h-14 mx-auto rounded-xl bg-surface border border-primary/30 flex items-center justify-center mb-4">
-            <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" /></svg>
+            <svg
+              className="w-7 h-7 text-primary"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
+              />
+            </svg>
           </div>
-          <h1 className="text-2xl font-bold text-textPrimary">Create account</h1>
+          <h1 className="text-2xl font-bold text-textPrimary">
+            Create account
+          </h1>
           <p className="text-textSecondary text-sm mt-1">Join Monthly Split</p>
         </div>
-        <form onSubmit={handleSubmit} className="bg-surface rounded-2xl border border-white/5 p-6 shadow-xl">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-surface rounded-2xl border border-white/5 p-6 shadow-xl"
+        >
+          {infoMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/30 text-primary text-sm">
+              {infoMessage}
+            </div>
+          )}
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">
               {error}
             </div>
           )}
-          <label className="block text-sm font-medium text-textSecondary mb-1">Name</label>
+          <label className="block text-sm font-medium text-textSecondary mb-1">
+            Name
+          </label>
           <input
             type="text"
             value={name}
@@ -162,7 +223,9 @@ export default function Signup() {
             required
             disabled={sendingOTP}
           />
-          <label className="block text-sm font-medium text-textSecondary mb-1">Email</label>
+          <label className="block text-sm font-medium text-textSecondary mb-1">
+            Email
+          </label>
           <input
             type="email"
             value={email}
@@ -173,22 +236,29 @@ export default function Signup() {
             disabled={sendingOTP}
           />
           <label className="block text-sm font-medium text-textSecondary mb-1">
-            Mobile number {returnUrl?.includes('/join/') ? '(required to join group)' : '(optional)'}
+            Mobile number{" "}
+            {returnUrl?.includes("/join/")
+              ? "(required to join group)"
+              : "(optional)"}
           </label>
           <input
             type="tel"
             value={mobile}
-            onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 15))}
+            onChange={(e) =>
+              setMobile(e.target.value.replace(/\D/g, "").slice(0, 15))
+            }
             className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary mb-4"
             placeholder="10-digit mobile"
             maxLength={15}
-            required={!!returnUrl?.includes('/join/')}
+            required={!!returnUrl?.includes("/join/")}
             disabled={sendingOTP}
           />
-          <label className="block text-sm font-medium text-textSecondary mb-1">Password (min 6)</label>
+          <label className="block text-sm font-medium text-textSecondary mb-1">
+            Password (min 6)
+          </label>
           <div className="relative mb-4">
             <input
-              type={showPassword ? 'text' : 'password'}
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 pr-12 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
@@ -197,20 +267,59 @@ export default function Signup() {
               minLength={6}
               disabled={sendingOTP}
             />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-textSecondary hover:text-primary transition p-1" tabIndex={-1}>
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-textSecondary hover:text-primary transition p-1"
+              tabIndex={-1}
+            >
               {showPassword ? (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.5 6.5m3.378 3.378L6.5 6.5m7.621 7.621L17.5 17.5m-3.379-3.379L17.5 17.5M3 3l18 18" /></svg>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.5 6.5m3.378 3.378L6.5 6.5m7.621 7.621L17.5 17.5m-3.379-3.379L17.5 17.5M3 3l18 18"
+                  />
+                </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  />
+                </svg>
               )}
             </button>
           </div>
-          <label className="block text-sm font-medium text-textSecondary mb-1">MPIN (optional, 4 digits)</label>
+          <label className="block text-sm font-medium text-textSecondary mb-1">
+            MPIN (optional, 4 digits)
+          </label>
           <input
             type="password"
             inputMode="numeric"
             value={mpinValue}
-            onChange={(e) => setMpinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            onChange={(e) =>
+              setMpinValue(e.target.value.replace(/\D/g, "").slice(0, 4))
+            }
             className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary mb-6"
             placeholder="4-digit MPIN for quick login"
             maxLength={4}
@@ -221,7 +330,11 @@ export default function Signup() {
             disabled={sendingOTP || loading}
             className="w-full py-3 rounded-lg bg-primary text-darkBg font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-darkBg disabled:opacity-50 transition"
           >
-            {sendingOTP ? 'Sending verification code…' : loading ? 'Creating account…' : 'Continue'}
+            {sendingOTP
+              ? "Sending verification code…"
+              : loading
+                ? "Creating account…"
+                : "Continue"}
           </button>
         </form>
       </div>

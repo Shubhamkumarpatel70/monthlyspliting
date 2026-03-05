@@ -84,8 +84,8 @@ router.post("/signup", async (req, res) => {
           .json({ message: "Mobile number already registered" });
     }
     const mpin = req.body.mpin;
-    if (mpin && (!/^\d{4}$/.test(mpin))) {
-      return res.status(400).json({ message: 'MPIN must be exactly 4 digits' });
+    if (mpin && !/^\d{4}$/.test(mpin)) {
+      return res.status(400).json({ message: "MPIN must be exactly 4 digits" });
     }
     const user = await User.create({
       name: name.trim(),
@@ -124,19 +124,24 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Email and password required" });
     }
     const user = await User.findOne({ email: email.toLowerCase() }).select(
-      "+password",
+      "+password +mpin",
     );
     if (!user)
-      return res.status(401).json({ message: "Invalid email or password" });
+      return res
+        .status(404)
+        .json({ message: "Account not found", code: "USER_NOT_FOUND" });
     const match = await user.comparePassword(password);
     if (!match)
-      return res.status(401).json({ message: "Invalid email or password" });
+      return res
+        .status(401)
+        .json({ message: "Wrong password", code: "WRONG_PASSWORD" });
     const token = generateToken(user._id);
     res.json({
       _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
+      hasMpin: !!user.mpin,
       token,
     });
   } catch (err) {
@@ -154,11 +159,18 @@ router.post("/login-mpin", async (req, res) => {
     if (!/^\d{4}$/.test(mpin)) {
       return res.status(400).json({ message: "MPIN must be 4 digits" });
     }
-    const user = await User.findOne({ email: email.toLowerCase() }).select("+mpin");
-    if (!user) return res.status(401).json({ message: "Invalid email or MPIN" });
-    if (!user.mpin) return res.status(400).json({ message: "MPIN not set. Please login with password." });
+    const user = await User.findOne({ email: email.toLowerCase() }).select(
+      "+mpin",
+    );
+    if (!user)
+      return res.status(401).json({ message: "Invalid email or MPIN" });
+    if (!user.mpin)
+      return res
+        .status(400)
+        .json({ message: "MPIN not set. Please login with password." });
     const match = await user.compareMpin(mpin);
-    if (!match) return res.status(401).json({ message: "Invalid email or MPIN" });
+    if (!match)
+      return res.status(401).json({ message: "Invalid email or MPIN" });
     const token = generateToken(user._id);
     res.json({
       _id: user._id,
@@ -173,7 +185,11 @@ router.post("/login-mpin", async (req, res) => {
 });
 
 router.get("/me", protect, async (req, res) => {
-  res.json(req.user);
+  const userWithMpin = await User.findById(req.user._id).select("+mpin");
+  res.json({
+    ...req.user.toObject(),
+    hasMpin: !!userWithMpin?.mpin,
+  });
 });
 
 // Public: check if mobile number is registered (for join flow)
@@ -196,7 +212,9 @@ router.post("/login-mobile", async (req, res) => {
     if (!mobileTrim || !password) {
       return res.status(400).json({ message: "Mobile and password required" });
     }
-    const user = await User.findOne({ mobile: mobileTrim }).select("+password");
+    const user = await User.findOne({ mobile: mobileTrim }).select(
+      "+password +mpin",
+    );
     if (!user)
       return res.status(401).json({ message: "Invalid mobile or password" });
     const match = await user.comparePassword(password);
@@ -209,6 +227,7 @@ router.post("/login-mobile", async (req, res) => {
       email: user.email,
       mobile: user.mobile,
       role: user.role,
+      hasMpin: !!user.mpin,
       token,
     });
   } catch (err) {
@@ -355,11 +374,9 @@ router.post("/verify-otp", async (req, res) => {
 
       // Check attempts (max 5 attempts)
       if (otp.attempts >= 5) {
-        return res
-          .status(400)
-          .json({
-            message: "Too many failed attempts. Please request a new code.",
-          });
+        return res.status(400).json({
+          message: "Too many failed attempts. Please request a new code.",
+        });
       }
 
       // Verify code - if doesn't match, increment attempts and return error
@@ -425,11 +442,9 @@ router.post("/verify-otp", async (req, res) => {
 
       // Check attempts (max 5 attempts)
       if (otp.attempts >= 5) {
-        return res
-          .status(400)
-          .json({
-            message: "Too many failed attempts. Please request a new code.",
-          });
+        return res.status(400).json({
+          message: "Too many failed attempts. Please request a new code.",
+        });
       }
 
       // Verify code - if doesn't match, increment attempts and return error
@@ -610,7 +625,9 @@ router.post("/forgot-password/reset", async (req, res) => {
         .json({ message: "Password must be at least 6 characters" });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select("+password");
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select("+password");
     if (!user) {
       return res
         .status(404)

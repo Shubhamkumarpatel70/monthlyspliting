@@ -14,7 +14,7 @@ import advanceRoutes from "./routes/advances.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 5000;
 
-connectDB();
+connectDB(); 
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));

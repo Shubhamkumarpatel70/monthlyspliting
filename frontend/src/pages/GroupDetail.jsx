@@ -18,17 +18,35 @@ export default function GroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  // Export monthly expenses CSV
-  const handleExport = () => {
+  // Export monthly expenses CSV with authentication
+  const handleExport = async () => {
     if (!groupId || !selectedMonth) return;
-    const url = `/api/groups/${groupId}/export?month=${encodeURIComponent(selectedMonth)}`;
-    // Create a hidden link and trigger download
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `report-${selectedMonth}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const backendUrl =
+      window.location.hostname === "localhost" ? "http://localhost:5000" : "";
+    const url = `${backendUrl}/api/groups/${groupId}/export?month=${encodeURIComponent(selectedMonth)}`;
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to export CSV");
+      }
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `report-${selectedMonth}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setError(err.message);
+    }
   };
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
@@ -261,12 +279,27 @@ export default function GroupDetail() {
       return;
     }
     try {
-      await advancesApi.create(groupId, {
-        amount: amt,
-        month: selectedMonth,
-        description: advanceDesc.trim(),
-        user: advancePayer,
-      });
+      if (advancePayer === "others" && group.members?.length) {
+        // Split advance equally among all members, do NOT send 'others' as payer
+        const splitAmt = amt / group.members.length;
+        await Promise.all(
+          group.members.map((m) =>
+            advancesApi.create(groupId, {
+              amount: splitAmt,
+              month: selectedMonth,
+              description: advanceDesc.trim() + " (split equally)",
+              user: m.user?._id || m.user,
+            }),
+          ),
+        );
+      } else {
+        await advancesApi.create(groupId, {
+          amount: amt,
+          month: selectedMonth,
+          description: advanceDesc.trim(),
+          user: advancePayer,
+        });
+      }
       setAddAdvanceOpen(false);
       setAdvanceAmount("");
       setAdvanceDesc("");
@@ -790,17 +823,19 @@ export default function GroupDetail() {
                   : "₹0.00"}
               </p>
               <p className="text-textSecondary text-xs mt-1">
-                Net: ₹
-                {(
-                  (balances?.totalExpense || 0) - (balances?.totalAdvance || 0)
-                ).toFixed(2)}
+                Each member gets: ₹
+                {balances?.totalAdvance != null && group?.members?.length
+                  ? (
+                      Number(balances.totalAdvance) / group.members.length
+                    ).toFixed(2)
+                  : "0.00"}
               </p>
             </div>
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Per person share</p>
               <p className="text-2xl font-bold text-primary mt-1">
-                {balances?.sharePerPerson != null
-                  ? `₹${Number(balances.sharePerPerson).toFixed(2)}`
+                {balances?.totalExpense != null && group?.members?.length
+                  ? `₹${(Number(balances.totalExpense) / group.members.length).toFixed(2)}`
                   : "—"}
               </p>
             </div>
@@ -863,22 +898,29 @@ export default function GroupDetail() {
                           /^[a-f0-9]+$/i.test(name)
                         )
                           name = "Member";
+                        // Paid: sum of expenses and advances paid by member
                         const paid = balances.paidByUser?.[id] ?? 0;
-                        const share = balances.sharePerPerson ?? 0;
-                        // Calculate 'You Get' (equal split advances)
+                        // Share: equal share
+                        const share =
+                          balances?.totalExpense != null &&
+                          group?.members?.length
+                            ? Number(balances.totalExpense) /
+                              group.members.length
+                            : 0;
+                        // You Get: sum of advances for member
                         let youGet = 0;
                         if (
                           Array.isArray(advancesList) &&
                           advancesList.length > 0
                         ) {
                           advancesList.forEach((adv) => {
-                            if (adv.description?.includes("split equally")) {
-                              if ((adv.user?._id || adv.user) === id) {
-                                youGet += Number(adv.amount);
-                              }
+                            if ((adv.user?._id || adv.user) === id) {
+                              youGet += Number(adv.amount);
                             }
                           });
                         }
+                        // Net = Paid + You Get − Share
+                        const net = paid + youGet - share;
                         return (
                           <tr
                             key={id}
@@ -887,19 +929,16 @@ export default function GroupDetail() {
                             <td className="px-3 sm:px-5 py-3 text-textPrimary font-medium">
                               {name}
                             </td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
-                              ₹{Number(paid).toFixed(2)}
-                            </td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
-                              ₹{Number(share).toFixed(2)}
-                            </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">{`₹${Number(paid).toFixed(2)}`}</td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">{`₹${Number(share).toFixed(2)}`}</td>
                             <td className="px-3 sm:px-5 py-3 text-right text-success text-sm">
                               {youGet > 0 ? `+₹${youGet.toFixed(2)}` : "—"}
                             </td>
                             <td
                               className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${b > 0 ? "text-success" : b < 0 ? "text-danger" : "text-textSecondary"}`}
                             >
-                              {b > 0 ? "+" : ""}₹{Number(b).toFixed(2)}
+                              {b > 0 ? "+" : ""}
+                              {`₹${Number(b).toFixed(2)}`}
                             </td>
                           </tr>
                         );

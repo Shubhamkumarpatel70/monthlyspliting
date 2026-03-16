@@ -18,6 +18,47 @@ export default function GroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [pulling, setPulling] = useState(false);
+  const [pullY, setPullY] = useState(0);
+  const pullThreshold = 60;
+
+  // Touch handlers for pull-to-refresh
+  useEffect(() => {
+    let startY = null;
+    const handleTouchStart = (e) => {
+      if (window.scrollY === 0) {
+        startY = e.touches[0].clientY;
+      }
+    };
+    const handleTouchMove = (e) => {
+      if (startY !== null) {
+        const deltaY = e.touches[0].clientY - startY;
+        if (deltaY > 0) {
+          setPulling(true);
+          setPullY(Math.min(deltaY, 120));
+        }
+      }
+    };
+    const handleTouchEnd = () => {
+      if (pulling && pullY > pullThreshold) {
+        setPulling(false);
+        setPullY(0);
+        refresh();
+      } else {
+        setPulling(false);
+        setPullY(0);
+      }
+      startY = null;
+    };
+    window.addEventListener("touchstart", handleTouchStart);
+    window.addEventListener("touchmove", handleTouchMove);
+    window.addEventListener("touchend", handleTouchEnd);
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [pulling, pullY]);
   // Export monthly expenses CSV with authentication
   const handleExport = async () => {
     if (!groupId || !selectedMonth) return;
@@ -448,6 +489,32 @@ export default function GroupDetail() {
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-24 sm:pb-8">
+      {pulling && (
+        <div
+          style={{
+            transform: `translateY(${pullY}px)`,
+            transition: pulling ? "none" : "transform 0.2s",
+          }}
+          className="flex flex-col items-center justify-center py-4"
+        >
+          <svg
+            className="w-8 h-8 text-primary animate-spin"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v12m0 0l-4-4m4 4l4-4"
+            />
+          </svg>
+          <span className="text-textSecondary text-sm mt-2">
+            Pull down to refresh
+          </span>
+        </div>
+      )}
       <div className="flex flex-col gap-4">
         <div>
           <button

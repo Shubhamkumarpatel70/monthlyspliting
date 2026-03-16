@@ -18,6 +18,18 @@ export default function GroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Export monthly expenses CSV
+  const handleExport = () => {
+    if (!groupId || !selectedMonth) return;
+    const url = `/api/groups/${groupId}/export?month=${encodeURIComponent(selectedMonth)}`;
+    // Create a hidden link and trigger download
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `report-${selectedMonth}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [months, setMonths] = useState([]);
@@ -460,6 +472,26 @@ export default function GroupDetail() {
               </option>
             ))}
           </select>
+          <button
+            onClick={handleExport}
+            disabled={!selectedMonth}
+            className="min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl bg-surface border border-primary/30 text-primary font-semibold touch-manipulation"
+          >
+            <svg
+              className="w-5 h-5 mr-2 inline"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v12m0 0l-4-4m4 4l4-4"
+              />
+            </svg>
+            Export monthly CSV
+          </button>
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => canAddExpense && setAddExpenseOpen(true)}
@@ -689,6 +721,7 @@ export default function GroupDetail() {
                 required
               >
                 <option value="">Select member</option>
+                <option value="others">Others (split equally)</option>
                 {group.members?.map((m) => {
                   const u = m.user;
                   const uid = u?._id || u;
@@ -791,7 +824,7 @@ export default function GroupDetail() {
                 Balance (paid − share)
               </h2>
               <div className="overflow-x-auto -mx-2 sm:mx-0">
-                <table className="w-full min-w-[280px]">
+                <table className="w-full min-w-[320px]">
                   <thead>
                     <tr className="border-b border-white/5">
                       <th className="text-left text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
@@ -802,6 +835,9 @@ export default function GroupDetail() {
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
                         Share
+                      </th>
+                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        You Get
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
                         Net
@@ -829,6 +865,20 @@ export default function GroupDetail() {
                           name = "Member";
                         const paid = balances.paidByUser?.[id] ?? 0;
                         const share = balances.sharePerPerson ?? 0;
+                        // Calculate 'You Get' (equal split advances)
+                        let youGet = 0;
+                        if (
+                          Array.isArray(advancesList) &&
+                          advancesList.length > 0
+                        ) {
+                          advancesList.forEach((adv) => {
+                            if (adv.description?.includes("split equally")) {
+                              if ((adv.user?._id || adv.user) === id) {
+                                youGet += Number(adv.amount);
+                              }
+                            }
+                          });
+                        }
                         return (
                           <tr
                             key={id}
@@ -842,6 +892,9 @@ export default function GroupDetail() {
                             </td>
                             <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
                               ₹{Number(share).toFixed(2)}
+                            </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-success text-sm">
+                              {youGet > 0 ? `+₹${youGet.toFixed(2)}` : "—"}
                             </td>
                             <td
                               className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${b > 0 ? "text-success" : b < 0 ? "text-danger" : "text-textSecondary"}`}

@@ -877,6 +877,9 @@ export default function GroupDetail() {
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
                         Net
                       </th>
+                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        Settlement
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -921,6 +924,20 @@ export default function GroupDetail() {
                         }
                         // Net = Paid + You Get − Share
                         const net = paid + youGet - share;
+
+                        // Settlement amount for this member
+                        let settlementAmt = 0;
+                        if (Array.isArray(settlement?.settlements)) {
+                          settlement.settlements.forEach((s) => {
+                            if ((s.from?._id || s.from) === id) {
+                              settlementAmt -= Number(s.amount);
+                            }
+                            if ((s.to?._id || s.to) === id) {
+                              settlementAmt += Number(s.amount);
+                            }
+                          });
+                        }
+
                         return (
                           <tr
                             key={id}
@@ -939,6 +956,13 @@ export default function GroupDetail() {
                             >
                               {b > 0 ? "+" : ""}
                               {`₹${Number(b).toFixed(2)}`}
+                            </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-primary text-sm">
+                              {settlementAmt === 0
+                                ? "—"
+                                : settlementAmt > 0
+                                  ? `+₹${settlementAmt.toFixed(2)}`
+                                  : `-₹${Math.abs(settlementAmt).toFixed(2)}`}
                             </td>
                           </tr>
                         );

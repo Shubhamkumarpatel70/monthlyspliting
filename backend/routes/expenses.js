@@ -126,7 +126,11 @@ router.get('/:groupId/settlement', groupMember, async (req, res) => {
       Advance.find({ group: req.params.groupId, month }),
     ]);
     const memberIds = req.group.members.map(m => m.user._id || m.user);
-    const { balances } = computeMonthlyBalances(expenses, memberIds, advances);
+    const result = computeMonthlyBalances(expenses, memberIds, advances);
+    // Use only the numeric finalNet values for settlement calculations
+    const balances = Object.fromEntries(
+      Object.entries(result.balances || {}).map(([id, b]) => [id, b.finalNet ?? 0]),
+    );
     const userMap = new Map();
     req.group.members.forEach(m => {
       const u = m.user;

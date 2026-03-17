@@ -1031,11 +1031,6 @@ export default function GroupDetail() {
 
                             <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
                               ₹{toMoney(paid)}
-                              {paid > 0 && !isSingleMember && (
-                                <span className="block text-xs text-success mt-1">
-                                  Paid by user
-                                </span>
-                              )}
                             </td>
 
                           <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">

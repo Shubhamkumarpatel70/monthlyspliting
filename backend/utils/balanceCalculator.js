@@ -23,9 +23,10 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
   }
   const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
   const totalAdvance = advances.reduce((sum, a) => sum + a.amount, 0);
-  // Net expense = Total expense - Total advance (advances reduce the amount to be split)
-  const netExpense = totalExpense - totalAdvance;
-  const sharePerPerson = netExpense / memberIds.length;
+  const numMembers = memberIds.length;
+  const originalShare = numMembers > 0 ? totalExpense / numMembers : 0;
+  const advanceShare = numMembers > 0 ? totalAdvance / numMembers : 0;
+  const finalShare = originalShare - advanceShare;
   const paidByUser = {};
   memberIds.forEach((id) => {
     paidByUser[id.toString()] = 0;
@@ -34,26 +35,31 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
     const key = e.payer?._id?.toString() ?? e.payer?.toString();
     if (key && paidByUser[key] !== undefined) paidByUser[key] += e.amount;
   });
-  // Advances are NOT payments. Do NOT add to paidByUser. Only reduce total expense, recalculate share, and compute net = paid - share.
   const balances = {};
   let netSum = 0;
   memberIds.forEach((id) => {
     const idStr = id.toString();
     const paid = paidByUser[idStr] ?? 0;
-    const net = paid - sharePerPerson;
-    balances[idStr] = net; // positive = creditor, negative = debtor
-    netSum += net;
+    const originalNet = paid - originalShare;
+    const finalNet = originalNet + advanceShare;
+    balances[idStr] = {
+      paid,
+      originalNet,
+      advanceShare,
+      finalNet,
+    };
+    netSum += finalNet;
   });
-  // Ensure sum of all nets = 0 (floating point tolerance)
+  // Ensure sum of all final nets = 0 (floating point tolerance)
   if (Math.abs(netSum) > 0.01) {
-    console.warn("Net sum not zero:", netSum);
-    // Optionally throw error or handle as needed
+    console.warn("Final net sum not zero:", netSum);
   }
   return {
     totalExpense,
     totalAdvance,
-    netExpense,
-    sharePerPerson,
+    originalShare,
+    advanceShare,
+    finalShare,
     paidByUser,
     balances,
   };

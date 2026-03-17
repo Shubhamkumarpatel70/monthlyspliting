@@ -837,10 +837,22 @@ export default function GroupDetail() {
               </p>
             </div>
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
-              <p className="text-textSecondary text-sm">Per person share</p>
+              <p className="text-textSecondary text-sm">Original share</p>
               <p className="text-2xl font-bold text-primary mt-1">
-                {balances?.totalExpense != null && group?.members?.length
-                  ? `₹${(Number(balances.totalExpense) / group.members.length).toFixed(2)}`
+                {balances?.originalShare != null
+                  ? `₹${Number(balances.originalShare).toFixed(2)}`
+                  : "—"}
+              </p>
+              <p className="text-textSecondary text-xs mt-1">
+                Advance per member: ₹
+                {balances?.advanceShare != null
+                  ? Number(balances.advanceShare).toFixed(2)
+                  : "—"}
+              </p>
+              <p className="text-textSecondary text-xs mt-1">
+                Final share: ₹
+                {balances?.finalShare != null
+                  ? Number(balances.finalShare).toFixed(2)
                   : "—"}
               </p>
             </div>
@@ -861,7 +873,7 @@ export default function GroupDetail() {
           {balances && (
             <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
               <h2 className="text-lg font-semibold text-textPrimary px-4 sm:px-5 py-4 border-b border-white/5">
-                Balance (paid − share)
+                Member Balances
               </h2>
               <div className="overflow-x-auto -mx-2 sm:mx-0">
                 <table className="w-full min-w-[320px]">
@@ -874,11 +886,13 @@ export default function GroupDetail() {
                         Paid
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
-                        Share
+                        Original Net
                       </th>
-                      {/* Removed 'You Get' column */}
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
-                        Net
+                        Advance Share
+                      </th>
+                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        Final Net
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
                         Settlement
@@ -888,46 +902,17 @@ export default function GroupDetail() {
                   <tbody>
                     {Object.entries(balances.balances || {}).map(
                       ([id, obj]) => {
-                        const b =
-                          typeof obj === "object" &&
-                          obj !== null &&
-                          "balance" in obj
-                            ? obj.balance
-                            : obj;
-                        let name =
-                          typeof obj === "object" && obj !== null && obj.name
-                            ? obj.name
-                            : id;
+                        let name = obj.name || id;
                         if (
                           name &&
                           name.length === 24 &&
                           /^[a-f0-9]+$/i.test(name)
                         )
                           name = "Member";
-                        // Paid: sum of expenses and advances paid by member
-                        const paid = balances.paidByUser?.[id] ?? 0;
-                        // Share: equal share
-                        const share =
-                          balances?.totalExpense != null &&
-                          group?.members?.length
-                            ? Number(balances.totalExpense) /
-                              group.members.length
-                            : 0;
-                        // You Get: sum of advances for member
-                        let youGet = 0;
-                        if (
-                          Array.isArray(advancesList) &&
-                          advancesList.length > 0
-                        ) {
-                          advancesList.forEach((adv) => {
-                            if ((adv.user?._id || adv.user) === id) {
-                              youGet += Number(adv.amount);
-                            }
-                          });
-                        }
-                        // Net = Paid - Share
-                        const net = paid - share;
-
+                        const paid = obj.paid ?? 0;
+                        const originalNet = obj.originalNet ?? 0;
+                        const advanceShare = obj.advanceShare ?? 0;
+                        const finalNet = obj.finalNet ?? 0;
                         // Settlement amount for this member
                         let settlementAmt = 0;
                         if (Array.isArray(settlement?.settlements)) {
@@ -940,7 +925,6 @@ export default function GroupDetail() {
                             }
                           });
                         }
-
                         return (
                           <tr
                             key={id}
@@ -949,14 +933,20 @@ export default function GroupDetail() {
                             <td className="px-3 sm:px-5 py-3 text-textPrimary font-medium">
                               {name}
                             </td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">{`₹${Number(paid).toFixed(2)}`}</td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">{`₹${Number(share).toFixed(2)}`}</td>
-                            {/* Removed 'You Get' cell */}
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
+                              ₹{Number(paid).toFixed(2)}
+                            </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
+                              ₹{Number(originalNet).toFixed(2)}
+                            </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
+                              ₹{Number(advanceShare).toFixed(2)}
+                            </td>
                             <td
-                              className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${b > 0 ? "text-success" : b < 0 ? "text-danger" : "text-textSecondary"}`}
+                              className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${finalNet > 0 ? "text-success" : finalNet < 0 ? "text-danger" : "text-textSecondary"}`}
                             >
-                              {b > 0 ? "+" : ""}
-                              {`₹${Number(b).toFixed(2)}`}
+                              {finalNet > 0 ? "+" : ""}₹
+                              {Number(finalNet).toFixed(2)}
                             </td>
                             <td className="px-3 sm:px-5 py-3 text-right text-primary text-sm">
                               {settlementAmt === 0

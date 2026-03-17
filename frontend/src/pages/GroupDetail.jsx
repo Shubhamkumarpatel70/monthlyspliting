@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import {
@@ -14,40 +14,21 @@ import Charts from "../components/Charts";
 
 const CATEGORIES = ["Food", "Rent", "Utilities", "Misc", "Custom"];
 
+const toMoney = (value) => {
+  const num = Number(value ?? 0);
+  return Number.isFinite(num) ? num.toFixed(2) : "0.00";
+};
+
+const safeNumber = (value, fallback = 0) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+};
+
 export default function GroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  // Export monthly expenses CSV with authentication
-  const handleExport = async () => {
-    if (!groupId || !selectedMonth) return;
-    const backendUrl =
-      window.location.hostname === "localhost" ? "http://localhost:5000" : "";
-    const url = `${backendUrl}/api/groups/${groupId}/export?month=${encodeURIComponent(selectedMonth)}`;
-    const token = localStorage.getItem("token");
-    try {
-      const res = await fetch(url, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || "Failed to export CSV");
-      }
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = `report-${selectedMonth}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [months, setMonths] = useState([]);
@@ -57,27 +38,44 @@ export default function GroupDetail() {
   const [payments, setPayments] = useState([]);
   const [advancesList, setAdvancesList] = useState([]);
   const [previousMonthBalances, setPreviousMonthBalances] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+
   const [addMemberOpen, setAddMemberOpen] = useState(false);
+
   const [addAdvanceOpen, setAddAdvanceOpen] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceDesc, setAdvanceDesc] = useState("");
-  const [advancePayer, setAdvancePayer] = useState("");
+
   const [editingAdvanceId, setEditingAdvanceId] = useState(null);
   const [editAdvanceAmount, setEditAdvanceAmount] = useState("");
   const [editAdvanceDesc, setEditAdvanceDesc] = useState("");
+
   const [memberMobile, setMemberMobile] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
+
   const [editNameOpen, setEditNameOpen] = useState(false);
   const [editGroupName, setEditGroupName] = useState("");
 
   const isAdmin = group?.members?.some(
     (m) =>
-      (m.user?._id || m.user)?.toString() === user?._id && m.role === "admin",
+      (m.user?._id || m.user)?.toString() === user?._id?.toString() &&
+      m.role === "admin",
   );
+
+  const memberMap = useMemo(() => {
+    const map = new Map();
+    (group?.members || []).forEach((m) => {
+      const id = (m.user?._id || m.user || m._id || m.id)?.toString();
+      const name = m.user?.name || m.name || "Member";
+      if (id) map.set(id, name);
+    });
+    return map;
+  }, [group]);
 
   const loadGroup = async () => {
     try {
@@ -85,7 +83,7 @@ export default function GroupDetail() {
       setGroup(data);
       setError("");
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to load group");
       if (
         err.message?.includes("not found") ||
         err.message?.toLowerCase().includes("not a member")
@@ -98,10 +96,15 @@ export default function GroupDetail() {
   const loadMonths = async () => {
     try {
       const data = await expensesApi.months(groupId);
-      setMonths(data);
+      setMonths(Array.isArray(data) ? data : []);
       const current = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-      setSelectedMonth((prev) => prev || (data.length ? data[0] : current));
-    } catch (_) {}
+      setSelectedMonth(
+        (prev) =>
+          prev || (Array.isArray(data) && data.length ? data[0] : current),
+      );
+    } catch {
+      // ignore
+    }
   };
 
   const loadExpenses = async () => {
@@ -110,7 +113,7 @@ export default function GroupDetail() {
       const data = await expensesApi.list(groupId, selectedMonth);
       setExpenses(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to load expenses");
       setExpenses([]);
     }
   };
@@ -119,8 +122,10 @@ export default function GroupDetail() {
     if (!selectedMonth) return;
     try {
       const data = await expensesApi.balances(groupId, selectedMonth);
-      setBalances(data);
-    } catch (_) {}
+      setBalances(data || null);
+    } catch {
+      setBalances(null);
+    }
   };
 
   const loadPayments = async () => {
@@ -128,7 +133,7 @@ export default function GroupDetail() {
     try {
       const data = await paymentsApi.list(groupId, selectedMonth);
       setPayments(Array.isArray(data) ? data : []);
-    } catch (_) {
+    } catch {
       setPayments([]);
     }
   };
@@ -138,7 +143,7 @@ export default function GroupDetail() {
     try {
       const data = await advancesApi.list(groupId, selectedMonth);
       setAdvancesList(Array.isArray(data) ? data : []);
-    } catch (_) {
+    } catch {
       setAdvancesList([]);
     }
   };
@@ -147,13 +152,16 @@ export default function GroupDetail() {
     if (!selectedMonth) return;
     try {
       const data = await expensesApi.settlement(groupId, selectedMonth);
-      setSettlement(data);
-    } catch (_) {}
+      setSettlement(data || null);
+    } catch {
+      setSettlement(null);
+    }
   };
 
   const getPreviousMonth = (yyyyMm) => {
     if (!yyyyMm) return null;
     const [y, m] = yyyyMm.split("-").map(Number);
+    if (!y || !m) return null;
     if (m === 1) return `${y - 1}-12`;
     return `${y}-${String(m - 1).padStart(2, "0")}`;
   };
@@ -164,8 +172,8 @@ export default function GroupDetail() {
     if (!prev) return;
     try {
       const data = await expensesApi.balances(groupId, prev);
-      setPreviousMonthBalances(data);
-    } catch (_) {
+      setPreviousMonthBalances(data || null);
+    } catch {
       setPreviousMonthBalances(null);
     }
   };
@@ -183,6 +191,7 @@ export default function GroupDetail() {
     if (!group || !selectedMonth) return;
     setLoading(true);
     setPreviousMonthBalances(null);
+
     Promise.all([
       loadExpenses(),
       loadBalances(),
@@ -191,21 +200,24 @@ export default function GroupDetail() {
       loadAdvances(),
       loadPreviousMonthBalances(),
     ]).finally(() => setLoading(false));
-  }, [groupId, selectedMonth]);
+  }, [groupId, selectedMonth, group?._id]);
 
-  // Real-time: poll for updates so other members see changes
   useEffect(() => {
     if (!groupId || !group) return;
+
     const POLL_MS = 8000;
-    let intervalId;
+
     const poll = () => {
       if (
         typeof document !== "undefined" &&
         document.visibilityState !== "visible"
-      )
+      ) {
         return;
+      }
+
       loadGroup();
       loadMonths();
+
       if (selectedMonth) {
         loadExpenses();
         loadBalances();
@@ -215,7 +227,8 @@ export default function GroupDetail() {
         loadPreviousMonthBalances();
       }
     };
-    intervalId = setInterval(poll, POLL_MS);
+
+    const intervalId = setInterval(poll, POLL_MS);
     return () => clearInterval(intervalId);
   }, [groupId, group?._id, selectedMonth]);
 
@@ -232,114 +245,156 @@ export default function GroupDetail() {
     }
   };
 
+  const handleExport = async () => {
+    if (!groupId || !selectedMonth) return;
+
+    const backendUrl =
+      window.location.hostname === "localhost" ? "http://localhost:5000" : "";
+    const url = `${backendUrl}/api/groups/${groupId}/export?month=${encodeURIComponent(selectedMonth)}`;
+    const token = localStorage.getItem("token");
+
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to export CSV");
+      }
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `report-${selectedMonth}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setError(err.message || "Failed to export CSV");
+    }
+  };
+
   const handleConfirmPayment = async (paymentId) => {
     try {
       await paymentsApi.confirm(groupId, paymentId);
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to confirm payment");
     }
   };
 
   const handleRejectPayment = async (paymentId) => {
-    if (!confirm("Are you sure the payment was not received?")) return;
+    if (!window.confirm("Are you sure the payment was not received?")) return;
+
     try {
       await paymentsApi.reject(groupId, paymentId, "Payment not received");
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to reject payment");
     }
   };
 
   const handleAddExpense = async (payload) => {
-    await expensesApi.create(groupId, payload);
-    setAddExpenseOpen(false);
-    refresh();
+    try {
+      await expensesApi.create(groupId, payload);
+      setAddExpenseOpen(false);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Failed to add expense");
+    }
   };
 
   const handleUpdateExpense = async (expenseId, payload) => {
-    await expensesApi.update(groupId, expenseId, payload);
-    setEditingExpense(null);
-    refresh();
+    try {
+      await expensesApi.update(groupId, expenseId, payload);
+      setEditingExpense(null);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Failed to update expense");
+    }
   };
 
   const handleDeleteExpense = async (expenseId) => {
-    if (!confirm("Delete this expense?")) return;
-    await expensesApi.delete(groupId, expenseId);
-    setEditingExpense(null);
-    refresh();
+    if (!window.confirm("Delete this expense?")) return;
+
+    try {
+      await expensesApi.delete(groupId, expenseId);
+      setEditingExpense(null);
+      refresh();
+    } catch (err) {
+      setError(err.message || "Failed to delete expense");
+    }
   };
 
+  // Advance = external group credit, not paid by any member
   const handleAddAdvance = async (e) => {
     e.preventDefault();
+
     const amt = parseFloat(advanceAmount);
-    if (!amt || amt < 0.01) return;
-    if (!advancePayer) {
-      setError("Please select a member or choose split option");
+    if (!amt || amt < 0.01) {
+      setError("Enter a valid advance amount");
       return;
     }
+
     try {
-      if (advancePayer === "split" && group.members?.length) {
-        // Split advance equally among all members
-        const splitAmt = amt / group.members.length;
-        await Promise.all(
-          group.members.map((m) =>
-            advancesApi.create(groupId, {
-              amount: splitAmt,
-              month: selectedMonth,
-              description: advanceDesc.trim() + " (split among all members)",
-              user: m.user?._id || m.user,
-            }),
-          ),
-        );
-      } else {
-        await advancesApi.create(groupId, {
-          amount: amt,
-          month: selectedMonth,
-          description: advanceDesc.trim(),
-          user: advancePayer,
-        });
-      }
+      await advancesApi.create(groupId, {
+        amount: amt,
+        month: selectedMonth,
+        description: advanceDesc.trim(),
+        type: "external_credit",
+      });
+
       setAddAdvanceOpen(false);
       setAdvanceAmount("");
       setAdvanceDesc("");
-      setAdvancePayer("");
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to add advance");
     }
   };
 
   const handleDeleteAdvance = async (advanceId) => {
-    if (!confirm("Delete this advance?")) return;
+    if (!window.confirm("Delete this advance?")) return;
+
     try {
       await advancesApi.delete(groupId, advanceId);
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to delete advance");
     }
   };
 
   const handleEditAdvance = (adv) => {
     setEditingAdvanceId(adv._id);
-    setEditAdvanceAmount(adv.amount.toString());
+    setEditAdvanceAmount(String(adv.amount ?? ""));
     setEditAdvanceDesc(adv.description || "");
   };
 
   const handleSaveAdvance = async () => {
     const amt = parseFloat(editAdvanceAmount);
-    if (!amt || amt < 0.01) return;
+    if (!amt || amt < 0.01) {
+      setError("Enter a valid advance amount");
+      return;
+    }
+
     try {
       await advancesApi.update(groupId, editingAdvanceId, {
         amount: amt,
         description: editAdvanceDesc.trim(),
+        type: "external_credit",
       });
+
       setEditingAdvanceId(null);
       setEditAdvanceAmount("");
       setEditAdvanceDesc("");
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to update advance");
     }
   };
 
@@ -353,14 +408,16 @@ export default function GroupDetail() {
     e.preventDefault();
     const mobile = memberMobile.replace(/\D/g, "").trim();
     if (!mobile) return;
+
     setError("");
+
     try {
       await groupsApi.addMember(groupId, mobile);
       setMemberMobile("");
       setAddMemberOpen(false);
       loadGroup();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to add member");
     }
   };
 
@@ -373,13 +430,14 @@ export default function GroupDetail() {
   };
 
   const handleRemoveMember = async (userId) => {
-    if (!confirm("Remove this member from the group?")) return;
+    if (!window.confirm("Remove this member from the group?")) return;
+
     try {
       await groupsApi.removeMember(groupId, userId);
       loadGroup();
       refresh();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to remove member");
     }
   };
 
@@ -388,7 +446,7 @@ export default function GroupDetail() {
       await expensesApi.settlementStatus(groupId, selectedMonth, status);
       loadSettlement();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to update settlement status");
     }
   };
 
@@ -396,28 +454,31 @@ export default function GroupDetail() {
     e?.preventDefault?.();
     const name = editGroupName?.trim();
     if (!name) return;
+
     try {
       await groupsApi.update(groupId, { name });
       setEditNameOpen(false);
       setEditGroupName("");
       loadGroup();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to update group name");
     }
   };
 
   const handleDeleteGroup = async () => {
     if (
-      !confirm(
+      !window.confirm(
         "Delete this group? All expenses and data will be permanently removed.",
       )
-    )
+    ) {
       return;
+    }
+
     try {
       await groupsApi.delete(groupId);
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to delete group");
     }
   };
 
@@ -436,6 +497,7 @@ export default function GroupDetail() {
   const monthOptions = [...new Set([...months, currentMonthStr])]
     .sort()
     .reverse();
+
   const displayMonth = selectedMonth
     ? (() => {
         const [y, m] = selectedMonth.split("-");
@@ -445,6 +507,23 @@ export default function GroupDetail() {
         );
       })()
     : "";
+
+  const totalExpense = safeNumber(balances?.totalExpense);
+  const totalAdvance = safeNumber(balances?.totalAdvance);
+  const originalShare = safeNumber(balances?.originalShare);
+  const advanceShare = safeNumber(balances?.advanceShare);
+  const finalShare = Math.max(0, safeNumber(balances?.finalShare));
+  const surplusCredit = Math.max(
+    0,
+    safeNumber(
+      balances?.surplusCredit,
+      totalAdvance > totalExpense ? totalAdvance - totalExpense : 0,
+    ),
+  );
+
+  const memberCount = group.members?.length || 0;
+  const isSingleMember = memberCount === 1;
+  const showSettlementView = memberCount > 1;
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-24 sm:pb-8">
@@ -456,6 +535,7 @@ export default function GroupDetail() {
           >
             ← Back to dashboard
           </button>
+
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-textPrimary break-words">
@@ -465,6 +545,7 @@ export default function GroupDetail() {
                 {group.members?.length || 0} members
               </p>
             </div>
+
             {isAdmin && (
               <div className="flex gap-2">
                 <button
@@ -476,6 +557,7 @@ export default function GroupDetail() {
                 >
                   Edit name
                 </button>
+
                 <button
                   onClick={handleDeleteGroup}
                   className="min-h-[36px] px-3 py-1.5 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm hover:bg-danger/20 touch-manipulation"
@@ -486,6 +568,7 @@ export default function GroupDetail() {
             )}
           </div>
         </div>
+
         <div className="flex flex-col xs:flex-row flex-wrap gap-2">
           <select
             value={selectedMonth}
@@ -505,6 +588,7 @@ export default function GroupDetail() {
               </option>
             ))}
           </select>
+
           <button
             onClick={handleExport}
             disabled={!selectedMonth}
@@ -525,6 +609,7 @@ export default function GroupDetail() {
             </svg>
             Export monthly CSV
           </button>
+
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => canAddExpense && setAddExpenseOpen(true)}
@@ -534,10 +619,15 @@ export default function GroupDetail() {
                   ? "Settlement marked as paid. Reset to pending to add expenses."
                   : undefined
               }
-              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${canAddExpense ? "bg-primary text-darkBg hover:bg-primary/90" : "bg-white/10 text-textSecondary cursor-not-allowed"}`}
+              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${
+                canAddExpense
+                  ? "bg-primary text-darkBg hover:bg-primary/90"
+                  : "bg-white/10 text-textSecondary cursor-not-allowed"
+              }`}
             >
               Add expense
             </button>
+
             <button
               onClick={handleShare}
               className="min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl bg-surface border border-white/10 text-textPrimary hover:border-primary/30 touch-manipulation flex items-center gap-2"
@@ -576,13 +666,19 @@ export default function GroupDetail() {
                 </>
               )}
             </button>
+
             <button
               onClick={() => canAddExpense && setAddAdvanceOpen(true)}
               disabled={!canAddExpense}
-              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${canAddExpense ? "bg-emerald-600 text-white hover:bg-emerald-500" : "bg-white/10 text-textSecondary cursor-not-allowed"}`}
+              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-3 sm:py-2.5 rounded-xl font-semibold touch-manipulation ${
+                canAddExpense
+                  ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                  : "bg-white/10 text-textSecondary cursor-not-allowed"
+              }`}
             >
               Add advance
             </button>
+
             {isAdmin && (
               <button
                 onClick={() => setAddMemberOpen(true)}
@@ -619,9 +715,11 @@ export default function GroupDetail() {
             <h2 className="text-lg font-semibold text-textPrimary mb-4">
               Add member
             </h2>
+
             <p className="text-textSecondary text-sm mb-3">
               They must have signed up with this mobile number first.
             </p>
+
             <form onSubmit={handleAddMember}>
               <input
                 type="tel"
@@ -636,6 +734,7 @@ export default function GroupDetail() {
                 className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary mb-4"
                 maxLength={15}
               />
+
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -668,6 +767,7 @@ export default function GroupDetail() {
             <h2 className="text-lg font-semibold text-textPrimary mb-4">
               Edit group name
             </h2>
+
             <form onSubmit={handleEditGroupName}>
               <input
                 type="text"
@@ -677,6 +777,7 @@ export default function GroupDetail() {
                 className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary mb-4"
                 required
               />
+
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -729,6 +830,7 @@ export default function GroupDetail() {
             <h2 className="text-lg font-semibold text-textPrimary mb-4">
               Add Advance
             </h2>
+
             <form onSubmit={handleAddAdvance}>
               <label className="block text-textSecondary text-sm mb-1">
                 Amount (₹)
@@ -744,27 +846,11 @@ export default function GroupDetail() {
                 step="0.01"
                 required
               />
-              <label className="block text-textSecondary text-sm mb-1">
-                Paid by
-              </label>
-              <select
-                value={advancePayer}
-                onChange={(e) => setAdvancePayer(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary mb-3"
-                required
-              >
-                <option value="">Select member (required)</option>
-                <option value="split">Split among all members</option>
-                {group.members?.map((m) => {
-                  const u = m.user;
-                  const uid = u?._id || u;
-                  return (
-                    <option key={uid} value={uid}>
-                      {u?.name || "Member"}
-                    </option>
-                  );
-                })}
-              </select>
+
+              <p className="text-textSecondary text-sm mb-3">
+                Advance is external credit shared equally among all members.
+              </p>
+
               <label className="block text-textSecondary text-sm mb-1">
                 Description (optional)
               </label>
@@ -772,9 +858,10 @@ export default function GroupDetail() {
                 type="text"
                 value={advanceDesc}
                 onChange={(e) => setAdvanceDesc(e.target.value)}
-                placeholder="e.g. Advance for rent"
+                placeholder="e.g. Landlord discount / cashback / bonus"
                 className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary placeholder-textSecondary focus:outline-none focus:ring-2 focus:ring-primary mb-4"
               />
+
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -805,63 +892,75 @@ export default function GroupDetail() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div
+            className={`grid gap-4 sm:grid-cols-2 ${surplusCredit > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}
+          >
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Total expense</p>
               <p className="text-2xl font-bold text-textPrimary mt-1">
-                {balances?.totalExpense != null
-                  ? `₹${Number(balances.totalExpense).toFixed(2)}`
-                  : "—"}
+                ₹{toMoney(totalExpense)}
               </p>
               <p className="text-textSecondary text-xs mt-1">{displayMonth}</p>
             </div>
+
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Total advance</p>
               <p className="text-2xl font-bold text-emerald-400 mt-1">
-                {balances?.totalAdvance != null
-                  ? `₹${Number(balances.totalAdvance).toFixed(2)}`
-                  : "₹0.00"}
+                ₹{toMoney(totalAdvance)}
               </p>
               <p className="text-textSecondary text-xs mt-1">
-                <strong>Advance:</strong> Amount paid ahead of time by a member,
-                counted towards their total paid. Not split among all unless
-                specified.
-              </p>
-              <p className="text-textSecondary text-xs mt-1">
-                Each member gets: ₹
-                {balances?.totalAdvance != null && group?.members?.length
-                  ? (
-                      Number(balances.totalAdvance) / group.members.length
-                    ).toFixed(2)
-                  : "0.00"}
+                Advance per member: ₹{toMoney(advanceShare)}
               </p>
             </div>
+
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Original share</p>
               <p className="text-2xl font-bold text-primary mt-1">
-                {balances?.originalShare != null
-                  ? `₹${Number(balances.originalShare).toFixed(2)}`
-                  : "—"}
-              </p>
-              <p className="text-textSecondary text-xs mt-1">
-                Advance per member: ₹
-                {balances?.advanceShare != null
-                  ? Number(balances.advanceShare).toFixed(2)
-                  : "—"}
-              </p>
-              <p className="text-textSecondary text-xs mt-1">
-                Final share: ₹
-                {balances?.finalShare != null
-                  ? Number(balances.finalShare).toFixed(2)
-                  : "—"}
+                ₹{toMoney(originalShare)}
               </p>
             </div>
+
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
-              <p className="text-textSecondary text-sm">Contributions</p>
-              <p className="text-textPrimary text-sm mt-1 font-medium">
-                See table below
+              <p className="text-textSecondary text-sm">Final share</p>
+              <p className="text-2xl font-bold text-primary mt-1">
+                ₹{toMoney(finalShare)}
               </p>
+              {totalAdvance > 0 && (
+                <>
+                  <p className="text-textSecondary text-xs mt-1">
+                    Final share = Original share − Advance per member
+                  </p>
+                  <p className="text-textSecondary text-xs mt-1">
+                    ₹{toMoney(originalShare)} − ₹{toMoney(advanceShare)} = ₹
+                    {toMoney(finalShare)}
+                  </p>
+                </>
+              )}
             </div>
+
+            {isSingleMember && totalAdvance > 0 && (
+              <div className="bg-surface rounded-2xl border border-white/5 p-5">
+                <p className="text-textSecondary text-sm">You saved</p>
+                <p className="text-2xl font-bold text-emerald-400 mt-1">
+                  ₹{toMoney(advanceShare)}
+                </p>
+              </div>
+            )}
+
+            {surplusCredit > 0 && (
+              <div className="bg-surface rounded-2xl border border-white/5 p-5">
+                <p className="text-textSecondary text-sm">Surplus credit</p>
+                <p className="text-2xl font-bold text-emerald-400 mt-1">
+                  ₹{toMoney(surplusCredit)}
+                </p>
+                <p className="text-textSecondary text-xs mt-1">
+                  {isSingleMember
+                    ? "Carry forward to next month"
+                    : "Carry forward / wallet balance"}
+                </p>
+              </div>
+            )}
+
             <div className="bg-surface rounded-2xl border border-white/5 p-5">
               <p className="text-textSecondary text-sm">Settlement</p>
               <p className="text-textPrimary text-sm mt-1 capitalize">
@@ -873,10 +972,11 @@ export default function GroupDetail() {
           {balances && (
             <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
               <h2 className="text-lg font-semibold text-textPrimary px-4 sm:px-5 py-4 border-b border-white/5">
-                Member Balances
+                Balances before and after advance
               </h2>
+
               <div className="overflow-x-auto -mx-2 sm:mx-0">
-                <table className="w-full min-w-[320px]">
+                <table className="w-full min-w-[640px]">
                   <thead>
                     <tr className="border-b border-white/5">
                       <th className="text-left text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
@@ -886,45 +986,40 @@ export default function GroupDetail() {
                         Paid
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
+                        Share
+                      </th>
+                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
                         Original Net
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
-                        Advance Share
+                        Advance Credit
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
-                        Final Net
+                        Net (Paid − share)
                       </th>
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
-                        Settlement
+                        Status
                       </th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {Object.entries(balances.balances || {}).map(
                       ([id, obj]) => {
-                        let name = obj.name || id;
-                        if (
-                          name &&
-                          name.length === 24 &&
-                          /^[a-f0-9]+$/i.test(name)
-                        )
-                          name = "Member";
-                        const paid = obj.paid ?? 0;
-                        const originalNet = obj.originalNet ?? 0;
-                        const advanceShare = obj.advanceShare ?? 0;
-                        const finalNet = obj.finalNet ?? 0;
-                        // Settlement amount for this member
-                        let settlementAmt = 0;
-                        if (Array.isArray(settlement?.settlements)) {
-                          settlement.settlements.forEach((s) => {
-                            if ((s.from?._id || s.from) === id) {
-                              settlementAmt -= Number(s.amount);
-                            }
-                            if ((s.to?._id || s.to) === id) {
-                              settlementAmt += Number(s.amount);
-                            }
-                          });
-                        }
+                        const name = memberMap.get(id.toString()) || "Member";
+                        const paid = safeNumber(obj.paid);
+                        const originalNet = safeNumber(obj.originalNet);
+                        const rowShare = safeNumber(finalShare);
+                        const rowAdvanceShare = safeNumber(
+                          obj.advanceShare,
+                          advanceShare,
+                        );
+                        const rowAdvanceReceived = safeNumber(
+                          obj.advanceReceived,
+                          0,
+                        );
+                        const finalNet = safeNumber(obj.finalNet);
+
                         return (
                           <tr
                             key={id}
@@ -933,27 +1028,76 @@ export default function GroupDetail() {
                             <td className="px-3 sm:px-5 py-3 text-textPrimary font-medium">
                               {name}
                             </td>
+
                             <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
-                              ₹{Number(paid).toFixed(2)}
+                              ₹{toMoney(paid)}
+                              {paid > 0 && !isSingleMember && (
+                                <span className="block text-xs text-success mt-1">
+                                  Paid by user
+                                </span>
+                              )}
                             </td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
-                              ₹{Number(originalNet).toFixed(2)}
-                            </td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
-                              ₹{Number(advanceShare).toFixed(2)}
-                            </td>
+
+                          <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
+                            ₹{toMoney(rowShare)}
+                          </td>
+
                             <td
-                              className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${finalNet > 0 ? "text-success" : finalNet < 0 ? "text-danger" : "text-textSecondary"}`}
+                              className={`px-3 sm:px-5 py-3 text-right text-sm ${
+                                originalNet > 0
+                                  ? "text-success"
+                                  : originalNet < 0
+                                    ? "text-danger"
+                                    : "text-textSecondary"
+                              }`}
                             >
-                              {finalNet > 0 ? "+" : ""}₹
-                              {Number(finalNet).toFixed(2)}
+                              {originalNet > 0 ? "+" : ""}₹
+                              {toMoney(originalNet)}
                             </td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-primary text-sm">
-                              {settlementAmt === 0
-                                ? "—"
-                                : settlementAmt > 0
-                                  ? `+₹${settlementAmt.toFixed(2)}`
-                                  : `-₹${Math.abs(settlementAmt).toFixed(2)}`}
+
+                            <td className="px-3 sm:px-5 py-3 text-right text-success text-sm">
+                              +₹{toMoney(rowAdvanceShare)}
+                            </td>
+
+                            <td
+                              className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${
+                                finalNet > 0
+                                  ? "text-success"
+                                  : finalNet < 0
+                                    ? "text-danger"
+                                    : "text-textSecondary"
+                              }`}
+                            >
+                              {finalNet > 0 ? "+" : ""}₹{toMoney(finalNet)}
+                            </td>
+
+                            <td className="px-3 sm:px-5 py-3 text-right text-sm">
+                              {(() => {
+                                if (finalNet > 0) {
+                                  return (
+                                    <span className="text-success">
+                                      Credit balance ₹{toMoney(finalNet)}
+                                    </span>
+                                  );
+                                }
+                                if (finalNet < 0) {
+                                  return (
+                                    <span className="text-danger">
+                                      Needs to pay ₹{toMoney(Math.abs(finalNet))}
+                                    </span>
+                                  );
+                                }
+
+                                // Zero final net
+                                const zeroLabel = isSingleMember
+                                  ? "No dues"
+                                  : "Settled";
+                                return (
+                                  <span className="text-textSecondary">
+                                    {zeroLabel}
+                                  </span>
+                                );
+                              })()}
                             </td>
                           </tr>
                         );
@@ -965,18 +1109,41 @@ export default function GroupDetail() {
             </div>
           )}
 
-          <SettlementView
-            settlement={settlement}
-            onStatusChange={handleSettlementStatus}
-            isAdmin={isAdmin}
-            groupId={groupId}
-            month={selectedMonth}
-            currentUserId={user?._id}
-            payments={payments}
-            onPaymentComplete={refresh}
-            onConfirmPayment={handleConfirmPayment}
-            onRejectPayment={handleRejectPayment}
-          />
+          {surplusCredit > 0 && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
+              <p className="text-emerald-300 font-medium">
+                All current month expenses are fully covered by advance.
+              </p>
+              <p className="text-textSecondary text-sm mt-1">
+                Extra credit of ₹{toMoney(surplusCredit)} should be carried
+                forward or stored as wallet balance.
+              </p>
+            </div>
+          )}
+
+          {showSettlementView ? (
+            <SettlementView
+              settlement={settlement}
+              onStatusChange={handleSettlementStatus}
+              isAdmin={isAdmin}
+              groupId={groupId}
+              month={selectedMonth}
+              currentUserId={user?._id}
+              payments={payments}
+              onPaymentComplete={refresh}
+              onConfirmPayment={handleConfirmPayment}
+              onRejectPayment={handleRejectPayment}
+            />
+          ) : (
+            <div className="bg-surface rounded-2xl border border-white/5 p-5">
+              <h2 className="text-lg font-semibold text-textPrimary mb-2">
+                Settlement
+              </h2>
+              <p className="text-textSecondary text-sm">
+                No settlement needed for single-member group.
+              </p>
+            </div>
+          )}
 
           {Array.isArray(expenses) && expenses.length > 0 && (
             <Charts
@@ -993,6 +1160,7 @@ export default function GroupDetail() {
               <h2 className="text-lg font-semibold text-textPrimary">
                 Expense ledger
               </h2>
+
               {canAddExpense && (
                 <button
                   onClick={() => setAddExpenseOpen(true)}
@@ -1015,12 +1183,14 @@ export default function GroupDetail() {
                 </button>
               )}
             </div>
+
             {!canAddExpense && (
               <p className="px-4 sm:px-5 py-3 text-warning/90 text-sm border-b border-white/5">
-                Settlement is marked as paid. Reset to pending (above) to add
-                more expenses.
+                Settlement is marked as paid. Reset to pending to add more
+                expenses.
               </p>
             )}
+
             {!Array.isArray(expenses) || expenses.length === 0 ? (
               <div className="px-4 sm:px-5 py-8 text-center">
                 <svg
@@ -1036,11 +1206,11 @@ export default function GroupDetail() {
                     d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"
                   />
                 </svg>
+
                 <p className="text-textSecondary text-sm">
-                  {canAddExpense
-                    ? "No expenses this month."
-                    : "No expenses this month."}
+                  No expenses this month.
                 </p>
+
                 {canAddExpense && (
                   <button
                     onClick={() => setAddExpenseOpen(true)}
@@ -1069,10 +1239,12 @@ export default function GroupDetail() {
                         · {format(new Date(ex.date), "dd MMM")}
                       </span>
                     </div>
+
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-primary font-semibold">
-                        ₹{Number(ex.amount).toFixed(2)}
+                        ₹{toMoney(ex.amount)}
                       </span>
+
                       <button
                         type="button"
                         onClick={() => canAddExpense && setEditingExpense(ex)}
@@ -1082,10 +1254,15 @@ export default function GroupDetail() {
                             ? "Can't edit - settlement is paid"
                             : "Edit expense"
                         }
-                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-textSecondary hover:text-primary hover:bg-white/5" : "text-textSecondary/40 cursor-not-allowed"}`}
+                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
+                          canAddExpense
+                            ? "text-textSecondary hover:text-primary hover:bg-white/5"
+                            : "text-textSecondary/40 cursor-not-allowed"
+                        }`}
                       >
                         Edit
                       </button>
+
                       <button
                         type="button"
                         onClick={() =>
@@ -1097,7 +1274,11 @@ export default function GroupDetail() {
                             ? "Can't delete - settlement is paid"
                             : "Delete expense"
                         }
-                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-danger hover:bg-danger/10" : "text-danger/40 cursor-not-allowed"}`}
+                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
+                          canAddExpense
+                            ? "text-danger hover:bg-danger/10"
+                            : "text-danger/40 cursor-not-allowed"
+                        }`}
                       >
                         Del
                       </button>
@@ -1108,12 +1289,12 @@ export default function GroupDetail() {
             )}
           </div>
 
-          {/* Advances section */}
           <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
             <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-white/5">
               <h2 className="text-lg font-semibold text-textPrimary">
                 Advances
               </h2>
+
               {canAddExpense && (
                 <button
                   onClick={() => setAddAdvanceOpen(true)}
@@ -1136,6 +1317,7 @@ export default function GroupDetail() {
                 </button>
               )}
             </div>
+
             {!Array.isArray(advancesList) || advancesList.length === 0 ? (
               <div className="px-4 sm:px-5 py-8 text-center">
                 <p className="text-textSecondary text-sm">
@@ -1159,6 +1341,7 @@ export default function GroupDetail() {
                             placeholder="Description"
                             className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-textPrimary text-sm"
                           />
+
                           <input
                             type="number"
                             value={editAdvanceAmount}
@@ -1171,6 +1354,7 @@ export default function GroupDetail() {
                             className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-textPrimary text-sm"
                           />
                         </div>
+
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
@@ -1179,6 +1363,7 @@ export default function GroupDetail() {
                           >
                             Save
                           </button>
+
                           <button
                             type="button"
                             onClick={handleCancelEditAdvance}
@@ -1192,35 +1377,45 @@ export default function GroupDetail() {
                       <>
                         <div className="flex-1 min-w-0">
                           <span className="text-textPrimary font-medium block truncate">
-                            {adv.description || "Advance payment"}
+                            {adv.description || "External credit"}
                           </span>
                           <span className="text-textSecondary text-xs sm:text-sm">
-                            <strong>Paid by:</strong>{" "}
-                            {adv.user?.name ?? "Unknown"} ·{" "}
+                            External credit ·{" "}
                             {format(new Date(adv.createdAt), "dd MMM")}
                           </span>
                         </div>
+
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-emerald-400 font-semibold">
-                            ₹{Number(adv.amount).toFixed(2)}
+                            ₹{toMoney(adv.amount)}
                           </span>
+
                           <button
                             type="button"
                             onClick={() =>
                               canAddExpense && handleEditAdvance(adv)
                             }
                             disabled={!canAddExpense}
-                            className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-primary hover:bg-primary/10" : "text-primary/40 cursor-not-allowed"}`}
+                            className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
+                              canAddExpense
+                                ? "text-primary hover:bg-primary/10"
+                                : "text-primary/40 cursor-not-allowed"
+                            }`}
                           >
                             Edit
                           </button>
+
                           <button
                             type="button"
                             onClick={() =>
                               canAddExpense && handleDeleteAdvance(adv._id)
                             }
                             disabled={!canAddExpense}
-                            className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${canAddExpense ? "text-danger hover:bg-danger/10" : "text-danger/40 cursor-not-allowed"}`}
+                            className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
+                              canAddExpense
+                                ? "text-danger hover:bg-danger/10"
+                                : "text-danger/40 cursor-not-allowed"
+                            }`}
                           >
                             Del
                           </button>
@@ -1238,18 +1433,22 @@ export default function GroupDetail() {
               <h2 className="text-lg font-semibold text-textPrimary mb-3">
                 Members
               </h2>
+
               <ul className="space-y-2">
                 {group.members?.map((m) => {
                   const u = m.user;
-                  const uid = u?._id || u;
-                  const isSelf = uid?.toString() === user?._id;
+                  const uid = (u?._id || u)?.toString();
+                  const isSelf = uid === user?._id?.toString();
+
                   return (
                     <li
                       key={uid}
                       className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
                     >
                       <div>
-                        <span className="text-textPrimary">{u?.name}</span>
+                        <span className="text-textPrimary">
+                          {u?.name || "Member"}
+                        </span>
                         {m.role === "admin" && (
                           <span className="ml-2 text-xs text-primary">
                             Admin
@@ -1259,6 +1458,7 @@ export default function GroupDetail() {
                           {u?.email}
                         </span>
                       </div>
+
                       {isAdmin && !isSelf && m.role !== "admin" && (
                         <button
                           onClick={() => handleRemoveMember(uid)}
@@ -1276,7 +1476,6 @@ export default function GroupDetail() {
         </>
       )}
 
-      {/* Floating Add expense button (mobile) */}
       {selectedMonth && (
         <button
           type="button"
@@ -1285,7 +1484,11 @@ export default function GroupDetail() {
           aria-label={
             canAddExpense ? "Add expense" : "Reset to pending to add expenses"
           }
-          className={`fixed bottom-6 right-6 w-14 h-14 sm:hidden rounded-full shadow-lg flex items-center justify-center touch-manipulation z-30 ${canAddExpense ? "bg-primary text-darkBg shadow-primary/30 hover:bg-primary/90 active:scale-95" : "bg-white/10 text-textSecondary cursor-not-allowed"}`}
+          className={`fixed bottom-6 right-6 w-14 h-14 sm:hidden rounded-full shadow-lg flex items-center justify-center touch-manipulation z-30 ${
+            canAddExpense
+              ? "bg-primary text-darkBg shadow-primary/30 hover:bg-primary/90 active:scale-95"
+              : "bg-white/10 text-textSecondary cursor-not-allowed"
+          }`}
         >
           <svg
             className="w-7 h-7"

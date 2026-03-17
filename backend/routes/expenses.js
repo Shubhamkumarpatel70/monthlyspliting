@@ -92,13 +92,23 @@ router.get('/:groupId/balances', groupMember, async (req, res) => {
       const id = u._id?.toString() ?? u?.toString();
       if (id) userMap.set(id, { name: u.name, email: u.email });
     });
-    const withNames = {
+
+    // Attach display name directly on each balance object so frontend
+    // can access fields like "paid", "finalNet" etc. without nesting.
+    const balancesWithNames = Object.fromEntries(
+      Object.entries(result.balances).map(([id, b]) => [
+        id,
+        {
+          ...b,
+          name: userMap.get(id)?.name ?? id,
+        },
+      ])
+    );
+
+    res.json({
       ...result,
-      balances: Object.fromEntries(
-        Object.entries(result.balances).map(([id, b]) => [id, { balance: b, name: userMap.get(id)?.name ?? id }])
-      ),
-    };
-    res.json(withNames);
+      balances: balancesWithNames,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to compute balances' });
   }
@@ -254,14 +264,23 @@ router.get('/:groupId/export', groupMember, async (req, res) => {
     rows.push('Total Expenses,' + result.totalExpense.toFixed(2));
     rows.push('Total Advances,' + result.totalAdvance.toFixed(2));
     rows.push('Total Pool,' + (result.totalExpense + result.totalAdvance).toFixed(2));
-    rows.push('Per Person Share,' + result.sharePerPerson.toFixed(2));
+    rows.push('Per Person Share,' + result.finalShare.toFixed(2));
     rows.push('');
     rows.push('BALANCES');
-    rows.push('Member,Paid,Share,Balance');
+    rows.push('Member,Paid,Share,Final Net');
     Object.entries(result.balances).forEach(([id, bal]) => {
       const name = userMap.get(id) || id;
       const paid = result.paidByUser[id] || 0;
-      rows.push(name + ',' + paid.toFixed(2) + ',' + result.sharePerPerson.toFixed(2) + ',' + bal.toFixed(2));
+      const finalNet = bal.finalNet ?? 0;
+      rows.push(
+        name +
+          ',' +
+          paid.toFixed(2) +
+          ',' +
+          result.finalShare.toFixed(2) +
+          ',' +
+          finalNet.toFixed(2)
+      );
     });
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="report-' + month + '.csv"');

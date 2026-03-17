@@ -1,9 +1,9 @@
-# Fix JSX Syntax Error in GroupDetail.jsx
+# Fix GroupDetail.jsx JSX Error
 
-## Steps:
+## Steps
 
-- [x] Step 1: Edit `frontend/src/pages/GroupDetail.jsx` to remove duplicate malformed JSX block after table map function and fix currency consistency.
-- [x] Step 2: Verify dev server starts without errors.
-- [x] Step 3: Complete task with attempt_completion.
-
-**✅ All steps completed!**
+- [x] 1. Remove stray debugging code block after displayMonth definition
+- [x] 2. Remove invalid <> fragment wrapper from select options
+- [x] 3. Verify Vite build/HMR works (no Babel errors)
+- [x] 4. Test month selector functionality
+- [x] 5. Complete task

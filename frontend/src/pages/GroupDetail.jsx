@@ -1119,38 +1119,31 @@ export default function GroupDetail() {
 
                             <td className="px-3 sm:px-5 py-3 text-right text-sm">
                               {(() => {
+                                // For positive balance, show original net and "received" parts
                                 if (finalNet > 0) {
-                                  const base = `Credit balance ₹${toMoney(finalNet)}`;
-                                  if (getsTotal > 0) {
-                                    const labelName =
-                                      getsFromNames.length === 1
-                                        ? getsFromNames[0]
-                                        : "multiple members";
-                                    return (
-                                      <span className="text-success">
-                                        {base} from {labelName}
-                                      </span>
-                                    );
-                                  }
+                                  const originalPart = toMoney(
+                                    Math.abs(originalNet),
+                                  );
+                                  const advancePart = toMoney(rowAdvanceShare);
+                                  const settlementPart =
+                                    getsTotal > 0 ? toMoney(getsTotal) : null;
+
                                   return (
-                                    <span className="text-success">{base}</span>
+                                    <span className="text-success">
+                                      ₹{originalPart} & ₹{advancePart}
+                                      {settlementPart
+                                        ? `+₹${settlementPart}`
+                                        : ""}
+                                    </span>
                                   );
                                 }
+
+                                // For negative balance, show only amount to pay (no names/text)
                                 if (finalNet < 0) {
-                                  const base = `Needs to pay ₹${toMoney(Math.abs(finalNet))}`;
-                                  if (paysTotal > 0) {
-                                    const labelName =
-                                      paysToNames.length === 1
-                                        ? paysToNames[0]
-                                        : "multiple members";
-                                    return (
-                                      <span className="text-danger">
-                                        {base} to {labelName}
-                                      </span>
-                                    );
-                                  }
                                   return (
-                                    <span className="text-danger">{base}</span>
+                                    <span className="text-danger">
+                                      ₹{toMoney(Math.abs(finalNet))}
+                                    </span>
                                   );
                                 }
 

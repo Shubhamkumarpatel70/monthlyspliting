@@ -1119,35 +1119,23 @@ export default function GroupDetail() {
 
                             <td className="px-3 sm:px-5 py-3 text-right text-sm">
                               {(() => {
-                                // For positive balance, show original net and "received" parts
+                                // Keep Status simple and easy to read.
                                 if (finalNet > 0) {
-                                  const originalPart = toMoney(
-                                    Math.abs(originalNet),
-                                  );
-                                  const advancePart = toMoney(rowAdvanceShare);
-                                  const settlementPart =
-                                    getsTotal > 0 ? toMoney(getsTotal) : null;
-
                                   return (
                                     <span className="text-success">
-                                      ₹{originalPart} & ₹{advancePart}
-                                      {settlementPart
-                                        ? `+₹${settlementPart}`
-                                        : ""}
+                                      Credit ₹{toMoney(finalNet)}
                                     </span>
                                   );
                                 }
 
-                                // For negative balance, show only amount to pay (no names/text)
                                 if (finalNet < 0) {
                                   return (
                                     <span className="text-danger">
-                                      ₹{toMoney(Math.abs(finalNet))}
+                                      Pay ₹{toMoney(Math.abs(finalNet))}
                                     </span>
                                   );
                                 }
 
-                                // Zero final net
                                 const zeroLabel = isSingleMember
                                   ? "No dues"
                                   : "Settled";

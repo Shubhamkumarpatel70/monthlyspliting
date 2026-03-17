@@ -127,9 +127,10 @@ router.get('/:groupId/settlement', groupMember, async (req, res) => {
     ]);
     const memberIds = req.group.members.map(m => m.user._id || m.user);
     const result = computeMonthlyBalances(expenses, memberIds, advances);
-    // Use only the numeric finalNet values for settlement calculations
+    // For settlement, use ORIGINAL net (paid - original share),
+    // so advances don't change who needs to pay whom.
     const balances = Object.fromEntries(
-      Object.entries(result.balances || {}).map(([id, b]) => [id, b.finalNet ?? 0]),
+      Object.entries(result.balances || {}).map(([id, b]) => [id, b.originalNet ?? 0]),
     );
     const userMap = new Map();
     req.group.members.forEach(m => {

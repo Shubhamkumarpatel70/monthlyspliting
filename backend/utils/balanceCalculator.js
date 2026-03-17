@@ -34,12 +34,7 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
     const key = e.payer?._id?.toString() ?? e.payer?.toString();
     if (key && paidByUser[key] !== undefined) paidByUser[key] += e.amount;
   });
-  // Advances are NOT payments; do not add to paidByUser. Only add to payer if advance is treated as a payment.
-  // If advance is a pre-payment, add only to payer:
-  advances.forEach((a) => {
-    const key = a.user?._id?.toString() ?? a.user?.toString();
-    if (key && paidByUser[key] !== undefined) paidByUser[key] += a.amount;
-  });
+  // Advances are NOT payments. Do NOT add to paidByUser. Only reduce total expense, recalculate share, and compute net = paid - share.
   const balances = {};
   let netSum = 0;
   memberIds.forEach((id) => {

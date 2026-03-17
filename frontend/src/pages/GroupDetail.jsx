@@ -482,14 +482,6 @@ export default function GroupDetail() {
     }
   };
 
-  if (!group) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   const settlementStatus = settlement?.status ?? "pending";
   const canAddExpense = settlementStatus === "pending";
 
@@ -521,9 +513,58 @@ export default function GroupDetail() {
     ),
   );
 
-  const memberCount = group.members?.length || 0;
+  const memberCount = group?.members?.length || 0;
   const isSingleMember = memberCount === 1;
   const showSettlementView = memberCount > 1;
+
+  // Map per-member transfer info from settlement:
+  // how much each member pays / receives and primary counterparty name.
+  const memberTransfers = useMemo(() => {
+    const map = {};
+    const txns =
+      settlement?.transactionsWithNames ?? settlement?.transactions ?? [];
+    if (!Array.isArray(txns)) return map;
+
+    txns.forEach((t) => {
+      const fromId = (t.from?._id || t.from || "").toString();
+      const toId = (t.to?._id || t.to || "").toString();
+      const amount = Number(t.amount) || 0;
+      if (!amount || !fromId || !toId) return;
+
+      if (!map[fromId]) {
+        map[fromId] = {
+          paysTotal: 0,
+          paysTo: [],
+          getsTotal: 0,
+          getsFrom: [],
+        };
+      }
+      if (!map[toId]) {
+        map[toId] = {
+          paysTotal: 0,
+          paysTo: [],
+          getsTotal: 0,
+          getsFrom: [],
+        };
+      }
+
+      map[fromId].paysTotal += amount;
+      map[fromId].paysTo.push(t.toName || memberMap.get(toId) || "Member");
+
+      map[toId].getsTotal += amount;
+      map[toId].getsFrom.push(t.fromName || memberMap.get(fromId) || "Member");
+    });
+
+    return map;
+  }, [settlement, memberMap]);
+
+  if (!group) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-24 sm:pb-8">
@@ -1020,6 +1061,16 @@ export default function GroupDetail() {
                         );
                         const finalNet = safeNumber(obj.finalNet);
 
+                        const transfer = memberTransfers[id.toString()];
+                        const paysTotal = safeNumber(transfer?.paysTotal);
+                        const getsTotal = safeNumber(transfer?.getsTotal);
+                        const paysToNames = Array.isArray(transfer?.paysTo)
+                          ? [...new Set(transfer.paysTo)]
+                          : [];
+                        const getsFromNames = Array.isArray(transfer?.getsFrom)
+                          ? [...new Set(transfer.getsFrom)]
+                          : [];
+
                         return (
                           <tr
                             key={id}
@@ -1069,17 +1120,37 @@ export default function GroupDetail() {
                             <td className="px-3 sm:px-5 py-3 text-right text-sm">
                               {(() => {
                                 if (finalNet > 0) {
+                                  const base = `Credit balance ₹${toMoney(finalNet)}`;
+                                  if (getsTotal > 0) {
+                                    const labelName =
+                                      getsFromNames.length === 1
+                                        ? getsFromNames[0]
+                                        : "multiple members";
+                                    return (
+                                      <span className="text-success">
+                                        {base} from {labelName}
+                                      </span>
+                                    );
+                                  }
                                   return (
-                                    <span className="text-success">
-                                      Credit balance ₹{toMoney(finalNet)}
-                                    </span>
+                                    <span className="text-success">{base}</span>
                                   );
                                 }
                                 if (finalNet < 0) {
+                                  const base = `Needs to pay ₹${toMoney(Math.abs(finalNet))}`;
+                                  if (paysTotal > 0) {
+                                    const labelName =
+                                      paysToNames.length === 1
+                                        ? paysToNames[0]
+                                        : "multiple members";
+                                    return (
+                                      <span className="text-danger">
+                                        {base} to {labelName}
+                                      </span>
+                                    );
+                                  }
                                   return (
-                                    <span className="text-danger">
-                                      Needs to pay ₹{toMoney(Math.abs(finalNet))}
-                                    </span>
+                                    <span className="text-danger">{base}</span>
                                   );
                                 }
 

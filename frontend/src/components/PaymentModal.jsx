@@ -184,6 +184,9 @@ export default function PaymentModal({
               <span className="text-danger">{fromName}</span> →{" "}
               <span className="text-success">{toName}</span>
             </p>
+            <p className="text-textSecondary text-xs mt-1">
+              Supports GPay, PhonePe, Paytm, BHIM and most UPI apps.
+            </p>
           </div>
 
           {error && (

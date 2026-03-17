@@ -34,16 +34,26 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
     const key = e.payer?._id?.toString() ?? e.payer?.toString();
     if (key && paidByUser[key] !== undefined) paidByUser[key] += e.amount;
   });
+  // Advances are NOT payments; do not add to paidByUser. Only add to payer if advance is treated as a payment.
+  // If advance is a pre-payment, add only to payer:
   advances.forEach((a) => {
     const key = a.user?._id?.toString() ?? a.user?.toString();
     if (key && paidByUser[key] !== undefined) paidByUser[key] += a.amount;
   });
   const balances = {};
+  let netSum = 0;
   memberIds.forEach((id) => {
     const idStr = id.toString();
     const paid = paidByUser[idStr] ?? 0;
-    balances[idStr] = paid - sharePerPerson; // positive = creditor, negative = debtor
+    const net = paid - sharePerPerson;
+    balances[idStr] = net; // positive = creditor, negative = debtor
+    netSum += net;
   });
+  // Ensure sum of all nets = 0 (floating point tolerance)
+  if (Math.abs(netSum) > 0.01) {
+    console.warn("Net sum not zero:", netSum);
+    // Optionally throw error or handle as needed
+  }
   return {
     totalExpense,
     totalAdvance,

@@ -275,19 +275,19 @@ export default function GroupDetail() {
     const amt = parseFloat(advanceAmount);
     if (!amt || amt < 0.01) return;
     if (!advancePayer) {
-      setError("Please select a member");
+      setError("Please select a member or choose split option");
       return;
     }
     try {
-      if (advancePayer === "others" && group.members?.length) {
-        // Split advance equally among all members, do NOT send 'others' as payer
+      if (advancePayer === "split" && group.members?.length) {
+        // Split advance equally among all members
         const splitAmt = amt / group.members.length;
         await Promise.all(
           group.members.map((m) =>
             advancesApi.create(groupId, {
               amount: splitAmt,
               month: selectedMonth,
-              description: advanceDesc.trim() + " (split equally)",
+              description: advanceDesc.trim() + " (split among all members)",
               user: m.user?._id || m.user,
             }),
           ),
@@ -753,8 +753,8 @@ export default function GroupDetail() {
                 className="w-full px-4 py-3 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary mb-3"
                 required
               >
-                <option value="">Select member</option>
-                <option value="others">Others (split equally)</option>
+                <option value="">Select member (required)</option>
+                <option value="split">Split among all members</option>
                 {group.members?.map((m) => {
                   const u = m.user;
                   const uid = u?._id || u;
@@ -823,6 +823,11 @@ export default function GroupDetail() {
                   : "₹0.00"}
               </p>
               <p className="text-textSecondary text-xs mt-1">
+                <strong>Advance:</strong> Amount paid ahead of time by a member,
+                counted towards their total paid. Not split among all unless
+                specified.
+              </p>
+              <p className="text-textSecondary text-xs mt-1">
                 Each member gets: ₹
                 {balances?.totalAdvance != null && group?.members?.length
                   ? (
@@ -871,9 +876,7 @@ export default function GroupDetail() {
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
                         Share
                       </th>
-                      <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
-                        You Get
-                      </th>
+                      {/* Removed 'You Get' column */}
                       <th className="text-right text-textSecondary text-sm font-medium px-3 sm:px-5 py-3">
                         Net
                       </th>
@@ -922,8 +925,8 @@ export default function GroupDetail() {
                             }
                           });
                         }
-                        // Net = Paid + You Get − Share
-                        const net = paid + youGet - share;
+                        // Net = Paid - Share
+                        const net = paid - share;
 
                         // Settlement amount for this member
                         let settlementAmt = 0;
@@ -948,9 +951,7 @@ export default function GroupDetail() {
                             </td>
                             <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">{`₹${Number(paid).toFixed(2)}`}</td>
                             <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">{`₹${Number(share).toFixed(2)}`}</td>
-                            <td className="px-3 sm:px-5 py-3 text-right text-success text-sm">
-                              {youGet > 0 ? `+₹${youGet.toFixed(2)}` : "—"}
-                            </td>
+                            {/* Removed 'You Get' cell */}
                             <td
                               className={`px-3 sm:px-5 py-3 text-right font-medium text-sm ${b > 0 ? "text-success" : b < 0 ? "text-danger" : "text-textSecondary"}`}
                             >
@@ -1204,6 +1205,7 @@ export default function GroupDetail() {
                             {adv.description || "Advance payment"}
                           </span>
                           <span className="text-textSecondary text-xs sm:text-sm">
+                            <strong>Paid by:</strong>{" "}
                             {adv.user?.name ?? "Unknown"} ·{" "}
                             {format(new Date(adv.createdAt), "dd MMM")}
                           </span>

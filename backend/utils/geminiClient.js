@@ -150,10 +150,10 @@ async function generateJsonOnceWithBackoff({ apiKey, model, system, user, maxOut
 }
 
 /**
- * Only models widely available on AI Studio keys — extra names cause 404s in your dashboard.
- * Fallback only on clear model-not-found (not on 429).
+ * Fallbacks only if the primary model returns 404. Do not use `gemini-1.5-flash-8b` — it is not a valid
+ * generateContent model ID (Google returns 404). See ListModels in AI Studio.
  */
-const MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-1.5-flash-8b"];
+const MODEL_FALLBACKS = ["gemini-1.5-pro", "gemini-2.0-flash"];
 
 export async function geminiChatJson({ system, user, maxOutputTokens = 1024 }) {
   const { apiKey, model: configuredModel } = getGeminiConfig();

@@ -16,6 +16,20 @@ export default {
       fontFamily: {
         sans: ['DM Sans', 'system-ui', 'sans-serif'],
       },
+      keyframes: {
+        'ai-shimmer': {
+          '0%': { transform: 'translateX(-120%)' },
+          '100%': { transform: 'translateX(350%)' },
+        },
+        'ai-pulse-glow': {
+          '0%, 100%': { opacity: '0.85' },
+          '50%': { opacity: '1' },
+        },
+      },
+      animation: {
+        'ai-shimmer': 'ai-shimmer 1.35s ease-in-out infinite',
+        'ai-pulse-glow': 'ai-pulse-glow 1.8s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

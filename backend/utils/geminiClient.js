@@ -1,6 +1,10 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getGeminiConfig } from "../config/ai.js";
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 function stripJsonFence(text) {
   if (!text || typeof text !== "string") return text;
   const t = text.trim();
@@ -42,8 +46,28 @@ function isModelOrNotFoundError(msg) {
   );
 }
 
-function isRateOrOverloadError(msg) {
-  return /429|503|UNAVAILABLE|overloaded|quota|RESOURCE_EXHAUSTED|rate limit|too many requests/i.test(msg);
+/** Errors that often succeed if we wait and retry (burst limits, cold overload). */
+function isRetryableGeminiError(msg) {
+  if (!msg) return false;
+  if (
+    /not found|invalid model|does not exist|API key|401|403|invalid.*key|PERMISSION_DENIED|API_KEY_INVALID/i.test(
+      msg,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /429|503|504|UNAVAILABLE|overloaded|RESOURCE_EXHAUSTED|rate limit|too many requests|Deadline|deadline exceeded|timeout|ECONNRESET|ETIMEDOUT|\b500\b|internal error|try again later/i.test(
+      msg,
+    )
+  ) {
+    return true;
+  }
+  // Daily / billing quota — retry usually does not help
+  if (/billing not enabled|exceeded your daily|quota.*0\b|limit: 0\b/i.test(msg)) {
+    return false;
+  }
+  return false;
 }
 
 async function generateJsonOnce({ apiKey, model, system, user }) {
@@ -66,8 +90,44 @@ async function generateJsonOnce({ apiKey, model, system, user }) {
   return parseJsonFromModelText(text);
 }
 
+const RETRY_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [0, 900, 1900, 3500, 6000];
+
+async function generateJsonOnceWithBackoff({ apiKey, model, system, user }) {
+  let lastErr;
+  let lastMsg = "";
+  for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
+    const delay = RETRY_DELAYS_MS[attempt] ?? 4000;
+    if (attempt > 0) {
+      const jitter = 0.85 + Math.random() * 0.25;
+      await sleep(Math.round(delay * jitter));
+    }
+    try {
+      return await generateJsonOnce({ apiKey, model, system, user });
+    } catch (err) {
+      lastErr = err;
+      lastMsg = flattenGeminiError(err);
+      console.error(`[gemini] model=${model} attempt=${attempt + 1}/${RETRY_ATTEMPTS}`, lastMsg);
+
+      if (isModelOrNotFoundError(lastMsg)) {
+        throw err;
+      }
+      if (/API key|API_KEY|401|403|invalid.*key/i.test(lastMsg)) {
+        throw err;
+      }
+
+      if (isRetryableGeminiError(lastMsg) && attempt < RETRY_ATTEMPTS - 1) {
+        console.warn(`[gemini] retrying after transient error (${attempt + 1}/${RETRY_ATTEMPTS})`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr || new Error(lastMsg || "Gemini request failed");
+}
+
 /**
- * Calls Gemini with JSON-only output. Retries with fallback models if the primary is unavailable.
+ * Calls Gemini with JSON-only output. Retries transient limits with backoff; tries fallback models if needed.
  */
 export async function geminiChatJson({ system, user }) {
   const { apiKey, model: configuredModel } = getGeminiConfig();
@@ -89,19 +149,13 @@ export async function geminiChatJson({ system, user }) {
   for (let i = 0; i < modelsToTry.length; i++) {
     const model = modelsToTry[i];
     try {
-      return await generateJsonOnce({ apiKey, model, system, user });
+      return await generateJsonOnceWithBackoff({ apiKey, model, system, user });
     } catch (err) {
       lastMsg = flattenGeminiError(err);
-      console.error(`[gemini] model=${model}`, lastMsg);
+      console.error(`[gemini] model=${model} failed after retries`, lastMsg);
 
-      if (isRateOrOverloadError(lastMsg)) {
-        throw new Error(
-          "Gemini is rate-limited or busy. Wait a minute and try again.",
-        );
-      }
-
-      const tryNext = isModelOrNotFoundError(lastMsg) && i < modelsToTry.length - 1;
-      if (tryNext) continue;
+      const tryNextModel = isModelOrNotFoundError(lastMsg) && i < modelsToTry.length - 1;
+      if (tryNextModel) continue;
 
       if (/API key|API_KEY|permission|401|403|invalid.*key/i.test(lastMsg)) {
         throw new Error(
@@ -109,7 +163,13 @@ export async function geminiChatJson({ system, user }) {
         );
       }
 
-      throw new Error(lastMsg.length > 280 ? `${lastMsg.slice(0, 277)}…` : lastMsg);
+      if (isRetryableGeminiError(lastMsg)) {
+        throw new Error(
+          "Gemini is still busy or rate-limited after several retries. Wait a few minutes and try again, or check your Google AI quota / billing.",
+        );
+      }
+
+      throw new Error(lastMsg.length > 320 ? `${lastMsg.slice(0, 317)}…` : lastMsg);
     }
   }
 

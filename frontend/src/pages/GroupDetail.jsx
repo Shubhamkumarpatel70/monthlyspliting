@@ -78,6 +78,7 @@ export default function GroupDetail() {
   const [editGroupName, setEditGroupName] = useState("");
 
   const [aiSummary, setAiSummary] = useState("");
+  const [aiSummarySavings, setAiSummarySavings] = useState([]);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [aiSummaryError, setAiSummaryError] = useState("");
   const {
@@ -229,6 +230,7 @@ export default function GroupDetail() {
 
   useEffect(() => {
     setAiSummary("");
+    setAiSummarySavings([]);
     setAiSummaryError("");
   }, [selectedMonth, groupId]);
 
@@ -285,9 +287,13 @@ export default function GroupDetail() {
         month: selectedMonth,
       });
       setAiSummary(res.summary || "");
+      setAiSummarySavings(
+        Array.isArray(res.savingsIdeas) ? res.savingsIdeas : [],
+      );
       startAiSummaryCooldown(45_000);
     } catch (err) {
       setAiSummary("");
+      setAiSummarySavings([]);
       const msg = err.message || "Failed to generate summary.";
       setAiSummaryError(msg);
       if (/429|rate limit|too many/i.test(msg)) {
@@ -1314,13 +1320,30 @@ export default function GroupDetail() {
               )}
               {aiSummary && (
                 <div
-                  className={`mt-4 border-t border-white/10 pt-4 transition-opacity duration-200 ${
+                  className={`mt-4 border-t border-white/10 pt-4 transition-opacity duration-200 space-y-4 ${
                     aiSummaryLoading ? "opacity-50 pointer-events-none" : "opacity-100"
                   }`}
                 >
-                  <p className="text-sm text-textPrimary leading-relaxed whitespace-pre-wrap">
-                    {aiSummary}
-                  </p>
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-textSecondary mb-2">
+                      Overview
+                    </h3>
+                    <p className="text-sm text-textPrimary leading-relaxed whitespace-pre-wrap">
+                      {aiSummary}
+                    </p>
+                  </div>
+                  {Array.isArray(aiSummarySavings) && aiSummarySavings.length > 0 && (
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90 mb-2">
+                        Where to save next month
+                      </h3>
+                      <ul className="list-disc list-inside space-y-2 text-sm text-textPrimary leading-relaxed marker:text-emerald-500/80">
+                        {aiSummarySavings.map((line, idx) => (
+                          <li key={idx}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

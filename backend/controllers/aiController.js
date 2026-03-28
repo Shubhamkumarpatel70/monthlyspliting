@@ -205,6 +205,43 @@ export async function monthSummary(req, res) {
       byCategory[c] = (byCategory[c] || 0) + e.amount;
     });
 
+    const byCategoryPrev = {};
+    prevExpenses.forEach((e) => {
+      const c =
+        e.category === "Custom" && e.customCategory
+          ? e.customCategory
+          : e.category || "Others";
+      byCategoryPrev[c] = (byCategoryPrev[c] || 0) + e.amount;
+    });
+
+    const topCategoriesDetailed = Object.entries(byCategory)
+      .map(([name, amount]) => {
+        const prevAmt = byCategoryPrev[name] || 0;
+        const pct =
+          totalThis > 0 ? Math.round((amount / totalThis) * 1000) / 10 : 0;
+        let monthOverMonthPct = null;
+        if (prevAmt > 0.01) {
+          monthOverMonthPct =
+            Math.round(((amount - prevAmt) / prevAmt) * 1000) / 10;
+        } else if (amount > 0.01) {
+          monthOverMonthPct = "new";
+        }
+        return {
+          category: name,
+          amountThisMonth: Math.round(amount * 100) / 100,
+          percentOfTotal: pct,
+          amountLastMonth: Math.round(prevAmt * 100) / 100,
+          monthOverMonthPercentChange: monthOverMonthPct,
+        };
+      })
+      .sort((a, b) => b.amountThisMonth - a.amountThisMonth)
+      .slice(0, 10);
+
+    const miscPct =
+      totalThis > 0
+        ? Math.round(((byCategory.Misc || 0) / totalThis) * 1000) / 10
+        : 0;
+
     const balanceRows = Object.entries(result.balances || {}).map(([id, b]) => ({
       name: userMap.get(id) || id,
       finalNet: b.finalNet ?? 0,
@@ -233,6 +270,9 @@ export async function monthSummary(req, res) {
       },
       topCategory: Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0],
       categoryTotals: byCategory,
+      topCategoriesDetailed,
+      miscCategoryPercentOfTotal: miscPct,
+      previousMonthCategoryTotals: byCategoryPrev,
       whoOwesMost: owesMost
         ? { name: owesMost.name, amountOwed: Math.abs(owesMost.finalNet) }
         : null,
@@ -242,21 +282,44 @@ export async function monthSummary(req, res) {
       memberBalances: balanceRows,
     };
 
-    const system = `You write concise personal finance summaries for a shared expense group in India (amounts in ₹).
-You will receive JSON with computed totals and balances. Write ONE short paragraph (3-5 sentences max) that is specific to this data — name categories, people, and numbers when relevant.
-Cover: where most money went (category), who owes the most net (if any), whether spending vs last month went up or down, and one practical suggestion.
-Avoid generic filler. Respond with JSON only: {"summary":"<your paragraph>"}`;
+    const system = `You are a concise financial coach for shared household / flat / group expenses in India. Amounts are in ₹.
+
+You receive JSON with: totals, categoryTotals, topCategoriesDetailed (with percentOfTotal, vs last month), member balances, who owes whom.
+
+Respond with JSON ONLY in this exact shape (no markdown):
+{
+  "summary": "string — 3–5 sentences: group name + month, total spend in ₹, which categories dominated (with ₹), who has the largest net balance to pay or receive (with ₹), and how spending vs the previous month changed.",
+  "savingsIdeas": ["string", "string", ...]
+}
+
+Rules for savingsIdeas (3–6 short bullets, each one line):
+- Every bullet MUST use this group's data (category names, ₹ amounts, or % from topCategoriesDetailed). No vague advice with no numbers.
+- If one category (especially Misc, Food, Shopping, Entertainment) is a large % of total, say how to cut it (e.g. split Misc into real labels, meal prep vs delivery, subscription audit).
+- If spending rose vs last month, point to categories in topCategoriesDetailed that grew and give one concrete savings step each.
+- If miscCategoryPercentOfTotal is high (>25%), urge clearer categories + a monthly cap for "Misc".
+- Include at least one idea that is clearly about "where to save" money next month, not only describing past spend.
+- Tone: practical, friendly, India-relevant where natural (UPI, local markets, etc.).`;
 
     const out = await groqChatJson({
       system,
       user: JSON.stringify(payload),
-      maxOutputTokens: 2048,
+      maxOutputTokens: 2560,
     });
     const summary =
       typeof out.summary === "string" && out.summary.trim()
         ? out.summary.trim()
         : "Summary unavailable.";
-    return res.json({ summary, meta: { month, groupName: group.name } });
+    const savingsIdeas = Array.isArray(out.savingsIdeas)
+      ? out.savingsIdeas
+          .filter((s) => typeof s === "string" && s.trim())
+          .map((s) => s.trim())
+          .slice(0, 8)
+      : [];
+    return res.json({
+      summary,
+      savingsIdeas,
+      meta: { month, groupName: group.name },
+    });
   } catch (err) {
     console.error("monthSummary:", err);
     return jsonError(

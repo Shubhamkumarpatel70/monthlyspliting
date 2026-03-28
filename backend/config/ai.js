@@ -10,8 +10,8 @@
 export function getGeminiConfig() {
   return {
     apiKey: process.env.GEMINI_API_KEY || "",
-    // e.g. gemini-2.0-flash, gemini-1.5-flash — see Google AI Studio model list
-    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+    // Default 1.5-flash: widely available on AI Studio keys; override with GEMINI_MODEL if needed
+    model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
   };
 }
 

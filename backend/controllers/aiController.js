@@ -20,6 +20,14 @@ function jsonError(res, status, message) {
   return res.status(status).json({ message });
 }
 
+/** Return safe API error text so production (e.g. Render) shows real Gemini hints, not a blind 503. */
+function aiFailureMessage(err, fallback) {
+  const msg = String(err?.message || "").trim();
+  if (!msg) return fallback;
+  if (msg.length > 400) return fallback;
+  return msg;
+}
+
 function normalizeCategory(value) {
   if (!value || typeof value !== "string") return "Others";
   const t = value.trim();
@@ -102,13 +110,14 @@ Example: {"title":"Pizza","amount":1200,"category":"Food","paidBy":"Rahul","part
     };
     return res.json({ parsed: normalized });
   } catch (err) {
-    console.error("parseExpense:", err.message);
+    console.error("parseExpense:", err);
     return jsonError(
       res,
       503,
-      err.message?.includes("not configured")
-        ? err.message
-        : "Could not parse expense. Try again or enter details manually.",
+      aiFailureMessage(
+        err,
+        "Could not parse expense. Try again or enter details manually.",
+      ),
     );
   }
 }
@@ -131,13 +140,11 @@ Respond with JSON only: {"category":"<one of the list>"} based on the expense te
     const category = normalizeCategory(out.category);
     return res.json({ category });
   } catch (err) {
-    console.error("suggestCategory:", err.message);
+    console.error("suggestCategory:", err);
     return jsonError(
       res,
       503,
-      err.message?.includes("not configured")
-        ? err.message
-        : "Could not suggest a category.",
+      aiFailureMessage(err, "Could not suggest a category."),
     );
   }
 }
@@ -248,13 +255,11 @@ Avoid generic filler. Respond with JSON only: {"summary":"<your paragraph>"}`;
         : "Summary unavailable.";
     return res.json({ summary, meta: { month, groupName: group.name } });
   } catch (err) {
-    console.error("monthSummary:", err.message);
+    console.error("monthSummary:", err);
     return jsonError(
       res,
       503,
-      err.message?.includes("not configured")
-        ? err.message
-        : "Could not generate monthly summary.",
+      aiFailureMessage(err, "Could not generate monthly summary."),
     );
   }
 }

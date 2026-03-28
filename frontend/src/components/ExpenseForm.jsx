@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { ai as aiApi } from '../api';
+import AIExpenseInput from './AIExpenseInput';
+
+function matchMemberIdByName(group, name) {
+  if (!name?.trim?.() || !group?.members?.length) return null;
+  const lower = name.toLowerCase().trim();
+  for (const m of group.members) {
+    const u = m.user;
+    const n = (u?.name || '').toLowerCase();
+    if (!n) continue;
+    if (n === lower || n.includes(lower) || lower.includes(n)) {
+      const id = u?._id || u;
+      return id != null ? String(id) : null;
+    }
+  }
+  return null;
+}
 
 export default function ExpenseForm({ group, expense, defaultMonth, categories, onSave, onCancel }) {
   const isEdit = !!expense;
@@ -14,6 +31,8 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
   const [customCategory, setCustomCategory] = useState(expense?.customCategory ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [categoryTouched, setCategoryTouched] = useState(!!expense);
+  const [nlSource, setNlSource] = useState('');
 
   useEffect(() => {
     if (!payerId && group?.members?.length) {
@@ -21,6 +40,21 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
       setPayerId(first != null ? String(first) : '');
     }
   }, [group, payerId]);
+
+  const applyParsed = (parsed, rawInput) => {
+    setNlSource(rawInput || '');
+    if (parsed.title) setDescription(parsed.title);
+    if (parsed.amount != null && !Number.isNaN(Number(parsed.amount))) {
+      setAmount(String(parsed.amount));
+    }
+    if (parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) {
+      setDate(parsed.date);
+    }
+    if (parsed.category) setCategory(parsed.category);
+    setCategoryTouched(true);
+    const matched = matchMemberIdByName(group, parsed.paidBy);
+    if (matched) setPayerId(matched);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,13 +66,31 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
     setError('');
     setSaving(true);
     try {
+      let finalCategory = category;
+      let usedAiCategory = false;
+      if (!isEdit && !categoryTouched && !nlSource && description.trim()) {
+        try {
+          const { category: suggested } = await aiApi.suggestCategory({
+            title: description.trim(),
+          });
+          if (suggested) {
+            finalCategory = suggested;
+            usedAiCategory = true;
+          }
+        } catch {
+          /* keep dropdown value */
+        }
+      }
+
       await onSave({
         description: description.trim(),
         amount: amt,
         date: new Date(date).toISOString(),
         payer: payerId ? String(payerId) : undefined,
-        category: category === 'Custom' ? 'Custom' : category,
-        customCategory: category === 'Custom' ? customCategory : undefined,
+        category: finalCategory === 'Custom' ? 'Custom' : finalCategory,
+        customCategory: finalCategory === 'Custom' ? customCategory : undefined,
+        aiGenerated: Boolean(nlSource) || usedAiCategory,
+        aiRawInput: nlSource || undefined,
       });
     } catch (err) {
       setError(err.message);
@@ -48,11 +100,17 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
   };
 
   const memberOptions = group?.members ?? [];
+  const groupId = group?._id;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 overflow-y-auto" onClick={onCancel}>
       <div className="bg-surface rounded-t-2xl sm:rounded-2xl border border-white/10 p-6 w-full max-w-md shadow-xl mt-auto sm:mt-8 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-textPrimary mb-4">{isEdit ? 'Edit expense' : 'Add expense'}</h2>
+        {!isEdit && groupId && (
+          <div className="mb-4">
+            <AIExpenseInput groupId={groupId} onParsed={applyParsed} disabled={saving} />
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">{error}</div>
@@ -110,7 +168,10 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
             <label className="block text-sm text-textSecondary mb-1">Category</label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setCategoryTouched(true);
+              }}
               className="w-full px-4 py-2.5 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {categories.map((c) => (

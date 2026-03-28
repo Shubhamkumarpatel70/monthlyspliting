@@ -176,6 +176,24 @@ export const payments = {
   getMyUpi: () => request("/payments/upi"),
 };
 
+export const ai = {
+  parseExpense: (body) =>
+    request("/ai/parse-expense", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  suggestCategory: (body) =>
+    request("/ai/suggest-category", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  monthSummary: (body) =>
+    request("/ai/month-summary", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+};
+
 export const admin = {
   stats: () => request("/admin/stats"),
   getUsers: (params) => {

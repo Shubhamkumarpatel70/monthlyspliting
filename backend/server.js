@@ -10,11 +10,12 @@ import expenseRoutes from "./routes/expenses.js";
 import adminRoutes from "./routes/admin.js";
 import paymentRoutes from "./routes/payments.js";
 import advanceRoutes from "./routes/advances.js";
+import aiRoutes from "./routes/ai.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 5000;
 
-connectDB(); 
+connectDB();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -27,6 +28,7 @@ app.use("/api/groups", paymentRoutes);
 app.use("/api/groups", advanceRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/ai", aiRoutes);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

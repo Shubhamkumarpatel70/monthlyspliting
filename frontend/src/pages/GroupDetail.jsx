@@ -6,13 +6,27 @@ import {
   expenses as expensesApi,
   payments as paymentsApi,
   advances as advancesApi,
+  ai as aiApi,
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 import ExpenseForm from "../components/ExpenseForm";
 import SettlementView from "../components/SettlementView";
 import Charts from "../components/Charts";
 
-const CATEGORIES = ["Food", "Rent", "Utilities", "Misc", "Custom"];
+const CATEGORIES = [
+  "Food",
+  "Travel",
+  "Rent",
+  "Bills",
+  "Shopping",
+  "Entertainment",
+  "Groceries",
+  "Health",
+  "Others",
+  "Utilities",
+  "Misc",
+  "Custom",
+];
 
 const toMoney = (value) => {
   const num = Number(value ?? 0);
@@ -60,6 +74,10 @@ export default function GroupDetail() {
 
   const [editNameOpen, setEditNameOpen] = useState(false);
   const [editGroupName, setEditGroupName] = useState("");
+
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryError, setAiSummaryError] = useState("");
 
   const isAdmin = group?.members?.some(
     (m) =>
@@ -203,6 +221,11 @@ export default function GroupDetail() {
   }, [groupId, selectedMonth, group?._id]);
 
   useEffect(() => {
+    setAiSummary("");
+    setAiSummaryError("");
+  }, [selectedMonth, groupId]);
+
+  useEffect(() => {
     if (!groupId || !group) return;
 
     const POLL_MS = 8000;
@@ -242,6 +265,24 @@ export default function GroupDetail() {
       loadPayments();
       loadAdvances();
       loadPreviousMonthBalances();
+    }
+  };
+
+  const handleAiMonthSummary = async () => {
+    if (!groupId || !selectedMonth) return;
+    setAiSummaryLoading(true);
+    setAiSummaryError("");
+    try {
+      const res = await aiApi.monthSummary({
+        groupId,
+        month: selectedMonth,
+      });
+      setAiSummary(res.summary || "");
+    } catch (err) {
+      setAiSummary("");
+      setAiSummaryError(err.message || "Failed to generate summary.");
+    } finally {
+      setAiSummaryLoading(false);
     }
   };
 
@@ -1200,6 +1241,34 @@ export default function GroupDetail() {
               selectedMonth={selectedMonth}
               previousMonthBalances={previousMonthBalances}
             />
+          )}
+
+          {selectedMonth && (
+            <div className="bg-surface rounded-2xl border border-primary/20 p-5">
+              <h2 className="text-lg font-semibold text-textPrimary mb-1">
+                AI month summary
+              </h2>
+              <p className="text-textSecondary text-sm mb-4">
+                Insights for the selected month using your group&apos;s expenses
+                and balances (not financial advice).
+              </p>
+              <button
+                type="button"
+                onClick={handleAiMonthSummary}
+                disabled={aiSummaryLoading}
+                className="px-4 py-2.5 rounded-lg bg-primary/15 text-primary text-sm font-medium border border-primary/30 hover:bg-primary/25 disabled:opacity-50"
+              >
+                {aiSummaryLoading ? "Generating…" : "Generate summary"}
+              </button>
+              {aiSummaryError && (
+                <p className="mt-3 text-sm text-danger">{aiSummaryError}</p>
+              )}
+              {aiSummary && (
+                <p className="mt-4 text-sm text-textPrimary leading-relaxed whitespace-pre-wrap border-t border-white/10 pt-4">
+                  {aiSummary}
+                </p>
+              )}
+            </div>
           )}
 
           <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">

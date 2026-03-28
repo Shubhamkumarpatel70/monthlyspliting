@@ -21,7 +21,7 @@ function extractMonth(bodyDate) {
 
 router.post('/:groupId', groupMember, async (req, res) => {
   try {
-    const { description, amount, date, category, customCategory } = req.body;
+    const { description, amount, date, category, customCategory, aiGenerated, aiRawInput } = req.body;
     const payerId = req.body.payer || req.user._id;
     if (!description?.trim() || amount == null || amount < 0.01) {
       return res.status(400).json({ message: 'Description and positive amount required' });
@@ -41,6 +41,8 @@ router.post('/:groupId', groupMember, async (req, res) => {
       month,
       category: cat,
       customCategory: cat === 'Custom' ? (customCategory || '').trim() : undefined,
+      aiGenerated: Boolean(aiGenerated),
+      aiRawInput: typeof aiRawInput === 'string' ? aiRawInput.slice(0, 2000) : '',
       addedBy: req.user._id,
     });
     const populated = await Expense.findById(expense._id)
@@ -190,7 +192,7 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
       group: req.params.groupId,
     }).populate('payer', 'name');
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
-    const { description, amount, date, payer, category, customCategory } = req.body;
+    const { description, amount, date, payer, category, customCategory, aiGenerated, aiRawInput } = req.body;
     if (description?.trim()) expense.description = description.trim();
     if (amount != null && amount >= 0.01) expense.amount = Number(amount);
     if (date) {
@@ -205,6 +207,8 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
       expense.category = category;
       expense.customCategory = category === 'Custom' ? (customCategory || '').trim() : undefined;
     }
+    if (typeof aiGenerated === 'boolean') expense.aiGenerated = aiGenerated;
+    if (typeof aiRawInput === 'string') expense.aiRawInput = aiRawInput.slice(0, 2000);
     await expense.save();
     const populated = await Expense.findById(expense._id)
       .populate('payer', 'name email')

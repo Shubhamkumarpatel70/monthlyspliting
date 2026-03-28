@@ -13,6 +13,7 @@ import ExpenseForm from "../components/ExpenseForm";
 import SettlementView from "../components/SettlementView";
 import Charts from "../components/Charts";
 import AiMonthSummaryLoader from "../components/AiMonthSummaryLoader";
+import { useAiCooldown } from "../hooks/useAiCooldown";
 
 const CATEGORIES = [
   "Food",
@@ -79,6 +80,11 @@ export default function GroupDetail() {
   const [aiSummary, setAiSummary] = useState("");
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [aiSummaryError, setAiSummaryError] = useState("");
+  const {
+    onCooldown: aiSummaryOnCooldown,
+    remainingSec: aiSummaryCooldownSec,
+    startCooldown: startAiSummaryCooldown,
+  } = useAiCooldown(45_000);
 
   const isAdmin = group?.members?.some(
     (m) =>
@@ -270,7 +276,7 @@ export default function GroupDetail() {
   };
 
   const handleAiMonthSummary = async () => {
-    if (!groupId || !selectedMonth) return;
+    if (!groupId || !selectedMonth || aiSummaryOnCooldown) return;
     setAiSummaryLoading(true);
     setAiSummaryError("");
     try {
@@ -279,9 +285,16 @@ export default function GroupDetail() {
         month: selectedMonth,
       });
       setAiSummary(res.summary || "");
+      startAiSummaryCooldown(45_000);
     } catch (err) {
       setAiSummary("");
-      setAiSummaryError(err.message || "Failed to generate summary.");
+      const msg = err.message || "Failed to generate summary.";
+      setAiSummaryError(msg);
+      if (/429|rate limit|too many/i.test(msg)) {
+        startAiSummaryCooldown(90_000);
+      } else {
+        startAiSummaryCooldown(30_000);
+      }
     } finally {
       setAiSummaryLoading(false);
     }
@@ -1256,7 +1269,7 @@ export default function GroupDetail() {
               <button
                 type="button"
                 onClick={handleAiMonthSummary}
-                disabled={aiSummaryLoading}
+                disabled={aiSummaryLoading || aiSummaryOnCooldown}
                 className="px-4 py-2.5 rounded-lg bg-primary/15 text-primary text-sm font-medium border border-primary/30 hover:bg-primary/25 disabled:opacity-60 flex items-center gap-2 min-w-[11rem] justify-center"
               >
                 {aiSummaryLoading ? (
@@ -1284,10 +1297,17 @@ export default function GroupDetail() {
                     </svg>
                     Generating…
                   </>
+                ) : aiSummaryOnCooldown ? (
+                  `Wait ${aiSummaryCooldownSec}s`
                 ) : (
                   "Generate summary"
                 )}
               </button>
+              {aiSummaryOnCooldown && !aiSummaryLoading && (
+                <p className="mt-2 text-xs text-textSecondary">
+                  Short pause between AI requests helps avoid Google rate limits (429).
+                </p>
+              )}
               {aiSummaryLoading && <AiMonthSummaryLoader />}
               {aiSummaryError && !aiSummaryLoading && (
                 <p className="mt-3 text-sm text-danger">{aiSummaryError}</p>

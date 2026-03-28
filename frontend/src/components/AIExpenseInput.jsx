@@ -1,12 +1,15 @@
 import React, { useState } from "react";
 import { ai as aiApi } from "../api";
+import { useAiCooldown } from "../hooks/useAiCooldown";
 
 export default function AIExpenseInput({ groupId, onParsed, disabled }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { onCooldown, remainingSec, startCooldown } = useAiCooldown(45_000);
 
   const handleParse = async () => {
+    if (onCooldown) return;
     setLoading(true);
     setError("");
     try {
@@ -15,12 +18,21 @@ export default function AIExpenseInput({ groupId, onParsed, disabled }) {
         ...(groupId ? { groupId } : {}),
       });
       onParsed?.(res.parsed, input.trim());
+      startCooldown(45_000);
     } catch (err) {
-      setError(err.message || "Could not parse expense. Try again.");
+      const msg = err.message || "Could not parse expense. Try again.";
+      setError(msg);
+      if (/429|rate limit|too many/i.test(msg)) {
+        startCooldown(90_000);
+      } else {
+        startCooldown(30_000);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const buttonBlocked = disabled || loading || onCooldown;
 
   return (
     <div className="rounded-xl border border-white/10 bg-darkBg/40 p-4 space-y-3">
@@ -38,11 +50,20 @@ export default function AIExpenseInput({ groupId, onParsed, disabled }) {
       <button
         type="button"
         onClick={handleParse}
-        disabled={loading || !input.trim() || disabled}
+        disabled={buttonBlocked || !input.trim()}
         className="w-full py-2.5 rounded-lg border border-primary/50 text-primary text-sm font-medium hover:bg-primary/10 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? "Parsing…" : "Parse with AI"}
+        {loading
+          ? "Parsing…"
+          : onCooldown
+            ? `Wait ${remainingSec}s (rate limit protection)`
+            : "Parse with AI"}
       </button>
+      {onCooldown && !loading && (
+        <p className="text-xs text-textSecondary">
+          Gemini limits how often you can call the API. Short pause avoids errors.
+        </p>
+      )}
       {error && (
         <div className="text-sm text-danger border border-danger/30 rounded-lg px-3 py-2 bg-danger/10">
           {error}

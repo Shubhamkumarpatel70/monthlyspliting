@@ -89,6 +89,7 @@ Example: {"title":"Pizza","amount":1200,"category":"Food","paidBy":"Rahul","part
     const parsed = await geminiChatJson({
       system,
       user: input.trim(),
+      maxOutputTokens: 512,
     });
     const normalized = {
       title: typeof parsed.title === "string" ? parsed.title : String(parsed.title ?? ""),
@@ -136,6 +137,7 @@ Respond with JSON only: {"category":"<one of the list>"} based on the expense te
     const out = await geminiChatJson({
       system,
       user: text,
+      maxOutputTokens: 256,
     });
     const category = normalizeCategory(out.category);
     return res.json({ category });
@@ -248,6 +250,7 @@ Avoid generic filler. Respond with JSON only: {"summary":"<your paragraph>"}`;
     const out = await geminiChatJson({
       system,
       user: JSON.stringify(payload),
+      maxOutputTokens: 2048,
     });
     const summary =
       typeof out.summary === "string" && out.summary.trim()

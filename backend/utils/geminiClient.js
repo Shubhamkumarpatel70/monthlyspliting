@@ -40,37 +40,49 @@ function flattenGeminiError(err) {
   return parts.filter(Boolean).join(" — ") || "Gemini request failed";
 }
 
+/** Only switch to another model when this name is wrong / not enabled for the key. */
 function isModelOrNotFoundError(msg) {
-  return /404|not found|NOT_FOUND|invalid model|model.*not (found|supported)|does not exist|is not supported/i.test(
+  return /404|not found|NOT_FOUND|invalid model|model.*not (found|supported)|does not exist|is not supported|ListModels/i.test(
     msg,
   );
 }
 
-/** Errors that often succeed if we wait and retry (burst limits, cold overload). */
+/**
+ * True only when the key itself is wrong or missing — NOT generic 403 (quota/billing often use 403 too).
+ */
+function isInvalidApiKeyMessage(msg) {
+  if (!msg) return false;
+  if (/API_KEY_INVALID|INCORRECT_API_KEY|invalid authentication credentials|No API.?KEY|api key is missing|must pass an API key/i.test(msg)) {
+    return true;
+  }
+  if (/Incorrect API key|API key not valid|invalid api key|not a valid API key/i.test(msg)) {
+    return true;
+  }
+  if (/\[401\b/.test(msg) || /\b401\b[^\d]*Unauthorized/i.test(msg)) {
+    return true;
+  }
+  return false;
+}
+
 function isRetryableGeminiError(msg) {
   if (!msg) return false;
+  if (isModelOrNotFoundError(msg) || isInvalidApiKeyMessage(msg)) return false;
+  if (/billing not enabled|exceeded your daily|quota.*0\b|limit: 0\b/i.test(msg)) return false;
   if (
-    /not found|invalid model|does not exist|API key|401|403|invalid.*key|PERMISSION_DENIED|API_KEY_INVALID/i.test(
-      msg,
-    )
-  ) {
-    return false;
-  }
-  if (
-    /429|503|504|UNAVAILABLE|overloaded|RESOURCE_EXHAUSTED|rate limit|too many requests|Deadline|deadline exceeded|timeout|ECONNRESET|ETIMEDOUT|\b500\b|internal error|try again later/i.test(
+    /429|503|504|UNAVAILABLE|overloaded|RESOURCE_EXHAUSTED|rate limit|too many requests|Quota exceeded|quota metric|Deadline|deadline exceeded|timeout|ECONNRESET|ETIMEDOUT|\b500\b|internal error|try again later|temporarily|PERMISSION_DENIED.*quota/i.test(
       msg,
     )
   ) {
     return true;
   }
-  // Daily / billing quota — retry usually does not help
-  if (/billing not enabled|exceeded your daily|quota.*0\b|limit: 0\b/i.test(msg)) {
-    return false;
+  // Some Gemini errors only say PERMISSION_DENIED with consumer quota — still worth retrying once
+  if (/PERMISSION_DENIED/i.test(msg) && /GenerateContent|generativelanguage/i.test(msg)) {
+    return true;
   }
   return false;
 }
 
-async function generateJsonOnce({ apiKey, model, system, user }) {
+async function generateJsonOnce({ apiKey, model, system, user, maxOutputTokens }) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const genModel = genAI.getGenerativeModel({
     model,
@@ -78,7 +90,7 @@ async function generateJsonOnce({ apiKey, model, system, user }) {
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.2,
-      maxOutputTokens: 2048,
+      maxOutputTokens,
     },
   });
 
@@ -90,20 +102,20 @@ async function generateJsonOnce({ apiKey, model, system, user }) {
   return parseJsonFromModelText(text);
 }
 
-const RETRY_ATTEMPTS = 5;
-const RETRY_DELAYS_MS = [0, 900, 1900, 3500, 6000];
+const RETRY_ATTEMPTS = 4;
+const RETRY_DELAYS_MS = [0, 1200, 2800, 5500];
 
-async function generateJsonOnceWithBackoff({ apiKey, model, system, user }) {
+async function generateJsonOnceWithBackoff({ apiKey, model, system, user, maxOutputTokens }) {
   let lastErr;
   let lastMsg = "";
   for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
-    const delay = RETRY_DELAYS_MS[attempt] ?? 4000;
+    const delay = RETRY_DELAYS_MS[attempt] ?? 5000;
     if (attempt > 0) {
-      const jitter = 0.85 + Math.random() * 0.25;
+      const jitter = 0.88 + Math.random() * 0.2;
       await sleep(Math.round(delay * jitter));
     }
     try {
-      return await generateJsonOnce({ apiKey, model, system, user });
+      return await generateJsonOnce({ apiKey, model, system, user, maxOutputTokens });
     } catch (err) {
       lastErr = err;
       lastMsg = flattenGeminiError(err);
@@ -112,12 +124,12 @@ async function generateJsonOnceWithBackoff({ apiKey, model, system, user }) {
       if (isModelOrNotFoundError(lastMsg)) {
         throw err;
       }
-      if (/API key|API_KEY|401|403|invalid.*key/i.test(lastMsg)) {
+      if (isInvalidApiKeyMessage(lastMsg)) {
         throw err;
       }
 
       if (isRetryableGeminiError(lastMsg) && attempt < RETRY_ATTEMPTS - 1) {
-        console.warn(`[gemini] retrying after transient error (${attempt + 1}/${RETRY_ATTEMPTS})`);
+        console.warn(`[gemini] retrying transient error (${attempt + 1}/${RETRY_ATTEMPTS})`);
         continue;
       }
       throw err;
@@ -127,15 +139,17 @@ async function generateJsonOnceWithBackoff({ apiKey, model, system, user }) {
 }
 
 /**
- * Calls Gemini with JSON-only output. Retries transient limits with backoff; tries fallback models if needed.
+ * Calls Gemini with JSON-only output.
+ * - Retries transient limits with backoff on **one** model (does not burn quota cycling models).
+ * - Tries fallback models **only** when the error is clearly “model not found / not supported”.
  */
-export async function geminiChatJson({ system, user }) {
+export async function geminiChatJson({ system, user, maxOutputTokens = 1024 }) {
   const { apiKey, model: configuredModel } = getGeminiConfig();
   if (!apiKey) {
     throw new Error("AI is not configured (set GEMINI_API_KEY on the server).");
   }
 
-  const fallbacks = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+  const fallbacks = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.0-flash"];
   const seen = new Set();
   const modelsToTry = [];
   for (const m of [configuredModel, ...fallbacks]) {
@@ -149,27 +163,36 @@ export async function geminiChatJson({ system, user }) {
   for (let i = 0; i < modelsToTry.length; i++) {
     const model = modelsToTry[i];
     try {
-      return await generateJsonOnceWithBackoff({ apiKey, model, system, user });
+      return await generateJsonOnceWithBackoff({
+        apiKey,
+        model,
+        system,
+        user,
+        maxOutputTokens,
+      });
     } catch (err) {
       lastMsg = flattenGeminiError(err);
-      console.error(`[gemini] model=${model} failed after retries`, lastMsg);
+      console.error(`[gemini] model=${model} failed`, lastMsg);
 
       const tryNextModel = isModelOrNotFoundError(lastMsg) && i < modelsToTry.length - 1;
-      if (tryNextModel) continue;
+      if (tryNextModel) {
+        console.warn(`[gemini] switching model after not-found: ${modelsToTry[i + 1]}`);
+        continue;
+      }
 
-      if (/API key|API_KEY|permission|401|403|invalid.*key/i.test(lastMsg)) {
+      if (isInvalidApiKeyMessage(lastMsg)) {
         throw new Error(
-          "Gemini API key rejected. Check GEMINI_API_KEY in your host (e.g. Render) environment.",
+          "Gemini rejected the API key (wrong or revoked). Create a new key at https://aistudio.google.com/apikey and set GEMINI_API_KEY on your host (no extra spaces).",
         );
       }
 
       if (isRetryableGeminiError(lastMsg)) {
         throw new Error(
-          "Gemini is still busy or rate-limited after several retries. Wait a few minutes and try again, or check your Google AI quota / billing.",
+          `Gemini is busy or your quota is tight after ${RETRY_ATTEMPTS} attempts. Wait 2–5 minutes, reduce how often you click AI actions, or check usage limits in Google AI Studio. Details: ${lastMsg.slice(0, 220)}${lastMsg.length > 220 ? "…" : ""}`,
         );
       }
 
-      throw new Error(lastMsg.length > 320 ? `${lastMsg.slice(0, 317)}…` : lastMsg);
+      throw new Error(lastMsg.length > 360 ? `${lastMsg.slice(0, 357)}…` : lastMsg);
     }
   }
 

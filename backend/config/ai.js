@@ -1,31 +1,21 @@
 /**
- * Google Gemini (Google AI Studio) — see https://aistudio.google.com/apikey
- * Put GEMINI_API_KEY in backend/.env — never commit real keys.
- * Trimmed automatically (Render/Vercel sometimes add stray spaces/newlines).
+ * Groq — OpenAI-compatible chat API (https://console.groq.com/keys)
+ * Put GROQ_API_KEY in backend/.env — never commit real keys.
  *
  * Where AI output is stored:
  * - Parsed / suggested expenses: MongoDB `Expense` (`aiGenerated`, `aiRawInput`)
  * - Month summary: on demand only unless you add persistence
  */
 
-/** IDs must match ListModels / AI Studio — `gemini-1.5-flash-8b` is not valid for generateContent (404). */
-function resolveModelName(raw) {
-  const t = typeof raw === "string" ? raw.trim() : "";
-  if (!t) return "gemini-1.5-flash";
-  if (t === "gemini-1.5-flash-8b") return "gemini-1.5-flash";
-  return t;
-}
-
-export function getGeminiConfig() {
-  const raw = process.env.GEMINI_API_KEY || "";
-  const apiKey = typeof raw === "string" ? raw.trim() : "";
-  const modelRaw = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-  return {
-    apiKey,
-    model: resolveModelName(modelRaw),
-  };
+export function getGroqConfig() {
+  const apiKey = (process.env.GROQ_API_KEY || "").trim();
+  const model = (process.env.GROQ_MODEL || "llama-3.3-70b-versatile").trim();
+  const apiUrl = (
+    process.env.GROQ_API_URL || "https://api.groq.com/openai/v1/chat/completions"
+  ).trim();
+  return { apiKey, model, apiUrl };
 }
 
 export function isAiConfigured() {
-  return Boolean(getGeminiConfig().apiKey);
+  return Boolean(getGroqConfig().apiKey);
 }

@@ -61,7 +61,7 @@ export default function AIExpenseInput({ groupId, onParsed, disabled }) {
       </button>
       {onCooldown && !loading && (
         <p className="text-xs text-textSecondary">
-          Gemini limits how often you can call the API. Short pause avoids errors.
+          The AI provider limits how often you can call the API. Short pause avoids errors.
         </p>
       )}
       {error && (

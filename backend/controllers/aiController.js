@@ -2,7 +2,7 @@ import Expense, { EXPENSE_CATEGORIES } from "../models/Expense.js";
 import Group from "../models/Group.js";
 import Advance from "../models/Advance.js";
 import { computeMonthlyBalances } from "../utils/balanceCalculator.js";
-import { geminiChatJson } from "../utils/geminiClient.js";
+import { groqChatJson } from "../utils/groqClient.js";
 
 const AI_SUGGEST_CATEGORIES = [
   "Food",
@@ -20,7 +20,7 @@ function jsonError(res, status, message) {
   return res.status(status).json({ message });
 }
 
-/** Return safe API error text so production (e.g. Render) shows real Gemini hints, not a blind 503. */
+/** Return safe API error text so production (e.g. Render) shows real Groq hints, not a blind 503. */
 function aiFailureMessage(err, fallback) {
   const msg = String(err?.message || "").trim();
   if (!msg) return fallback;
@@ -86,7 +86,7 @@ Rules: Infer category from context. If amount is missing, use null. If date is m
 Example: {"title":"Pizza","amount":1200,"category":"Food","paidBy":"Rahul","participants":["Rahul","Aman"],"splitType":"equal","note":null,"date":"${today}"}`;
 
   try {
-    const parsed = await geminiChatJson({
+    const parsed = await groqChatJson({
       system,
       user: input.trim(),
       maxOutputTokens: 512,
@@ -134,7 +134,7 @@ export async function suggestCategory(req, res) {
 Respond with JSON only: {"category":"<one of the list>"} based on the expense text.`;
 
   try {
-    const out = await geminiChatJson({
+    const out = await groqChatJson({
       system,
       user: text,
       maxOutputTokens: 256,
@@ -247,7 +247,7 @@ You will receive JSON with computed totals and balances. Write ONE short paragra
 Cover: where most money went (category), who owes the most net (if any), whether spending vs last month went up or down, and one practical suggestion.
 Avoid generic filler. Respond with JSON only: {"summary":"<your paragraph>"}`;
 
-    const out = await geminiChatJson({
+    const out = await groqChatJson({
       system,
       user: JSON.stringify(payload),
       maxOutputTokens: 2048,

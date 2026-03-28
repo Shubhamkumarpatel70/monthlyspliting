@@ -1305,7 +1305,7 @@ export default function GroupDetail() {
               </button>
               {aiSummaryOnCooldown && !aiSummaryLoading && (
                 <p className="mt-2 text-xs text-textSecondary">
-                  Short pause between AI requests helps avoid Google rate limits (429).
+                  Short pause between AI requests helps avoid rate limits (429).
                 </p>
               )}
               {aiSummaryLoading && <AiMonthSummaryLoader />}

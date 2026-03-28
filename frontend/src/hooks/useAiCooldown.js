@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 /**
- * Blocks repeated Gemini calls for a short window to reduce 429 rate limits.
+ * Blocks repeated AI API calls for a short window to reduce 429 rate limits.
  * @param {number} defaultMs default cooldown when startCooldown() is called with no args
  */
 export function useAiCooldown(defaultMs = 45_000) {

@@ -1351,8 +1351,13 @@ export default function GroupDetail() {
 
           <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
             <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-white/5">
-              <h2 className="text-lg font-semibold text-textPrimary">
+              <h2 className="text-lg font-semibold text-textPrimary flex items-baseline flex-wrap gap-x-2 gap-y-0">
                 Expense ledger
+                {Array.isArray(expenses) && expenses.length > 0 && (
+                  <span className="text-sm font-normal text-textSecondary">
+                    {expenses.length} in {displayMonth}
+                  </span>
+                )}
               </h2>
 
               {canAddExpense && (
@@ -1415,8 +1420,8 @@ export default function GroupDetail() {
                 )}
               </div>
             ) : (
-              <ul className="divide-y divide-white/5">
-                {expenses.slice(0, 30).map((ex) => (
+              <ul className="divide-y divide-white/5 max-h-[min(70vh,900px)] overflow-y-auto overscroll-contain">
+                {expenses.map((ex) => (
                   <li
                     key={ex._id}
                     className="px-4 sm:px-5 py-3 sm:py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10 min-h-[52px]"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { ai as aiApi } from '../api';
+import { ai as aiApi, expenses as expensesApi } from '../api';
 import AIExpenseInput from './AIExpenseInput';
 
 function matchMemberIdByName(group, name) {
@@ -31,6 +31,7 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
   const [customCategory, setCustomCategory] = useState(expense?.customCategory ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [duplicateMatches, setDuplicateMatches] = useState(null);
   const [categoryTouched, setCategoryTouched] = useState(!!expense);
   const [nlSource, setNlSource] = useState('');
   const memberOptions = group?.members ?? [];
@@ -96,14 +97,36 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
     setSplitValues((prev) => ({ ...prev, [userId]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const groupId = group?._id;
+
+  const submitExpense = async (skipDuplicate = false) => {
     const amt = parseFloat(amount);
     if (!description.trim() || isNaN(amt) || amt < 0.01) {
       setError('Description and a positive amount are required.');
       return;
     }
     setError('');
+    if (!skipDuplicate && groupId) {
+      setSaving(true);
+      try {
+        const { matches } = await expensesApi.checkDuplicate(groupId, {
+          description: description.trim(),
+          amount: amt,
+          date: new Date(date).toISOString(),
+          excludeExpenseId: expense?._id,
+        });
+        if (Array.isArray(matches) && matches.length > 0) {
+          setDuplicateMatches(matches);
+          return;
+        }
+      } catch {
+        /* proceed if duplicate check fails */
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    setDuplicateMatches(null);
     setSaving(true);
     try {
       let finalCategory = category;
@@ -145,7 +168,10 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
     }
   };
 
-  const groupId = group?._id;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await submitExpense(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 overflow-y-auto" onClick={onCancel}>
@@ -157,9 +183,47 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
           </div>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {duplicateMatches?.length > 0 && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/35 text-sm">
+              <p className="font-medium text-amber-200/95 mb-2">
+                Similar expense already exists (same description, amount, and date)
+              </p>
+              <ul className="text-textSecondary text-xs space-y-1.5 mb-3 list-disc list-inside">
+                {duplicateMatches.map((m) => (
+                  <li key={m._id}>
+                    {m.description} · ₹{Number(m.amount).toFixed(2)} ·{' '}
+                    {format(new Date(m.date), 'dd MMM yyyy')}
+                    {m.payer?.name ? ` · ${m.payer.name}` : ''}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => submitExpense(true)}
+                  disabled={saving}
+                  className="px-3 py-2 rounded-lg bg-amber-500/25 text-amber-100 text-sm font-medium hover:bg-amber-500/35 disabled:opacity-50"
+                >
+                  Save anyway
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateMatches(null)}
+                  className="px-3 py-2 rounded-lg border border-white/15 text-textSecondary text-sm hover:bg-white/5"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           {error && (
             <div className="p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">{error}</div>
           )}
+</think>
+Fixing a typo in ExpenseForm (broken JSX).
+
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+Read
           <div>
             <label className="block text-sm text-textSecondary mb-1">Description</label>
             <input

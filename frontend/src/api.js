@@ -117,6 +117,11 @@ export const expenses = {
     }),
   delete: (groupId, expenseId) =>
     request(`/groups/${groupId}/expenses/${expenseId}`, { method: "DELETE" }),
+  checkDuplicate: (groupId, data) =>
+    request(`/groups/${groupId}/expenses/check-duplicate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   balances: (groupId, month) =>
     request(`/groups/${groupId}/balances?month=${encodeURIComponent(month)}`),
   settlement: (groupId, month) =>

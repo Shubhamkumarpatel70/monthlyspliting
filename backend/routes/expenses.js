@@ -26,6 +26,21 @@ function toIdString(x) {
   return String(x);
 }
 
+function normalizeExpenseDescription(s) {
+  return (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function sameCalendarDay(dateA, dateB) {
+  const a = new Date(dateA);
+  const b = new Date(dateB);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return false;
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 function normalizeSplitPayload({ amount, memberIds, participants, splitType, splitValues }) {
   const amt = Number(amount);
   const allowedTypes = ["equal", "exact", "percentage"];
@@ -111,6 +126,44 @@ router.post('/:groupId', groupMember, async (req, res) => {
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to add expense' });
+  }
+});
+
+router.post('/:groupId/expenses/check-duplicate', groupMember, async (req, res) => {
+  try {
+    const { description, amount, date, excludeExpenseId } = req.body || {};
+    const normDesc = normalizeExpenseDescription(description);
+    const amt = Number(amount);
+    if (!normDesc || !Number.isFinite(amt) || amt < 0.01) {
+      return res.json({ matches: [] });
+    }
+    const dateObj = date ? new Date(date) : new Date();
+    if (isNaN(dateObj.getTime())) return res.json({ matches: [] });
+    const month = extractMonth(dateObj) || getMonthFromDate(dateObj);
+
+    const list = await Expense.find({ group: req.params.groupId, month })
+      .populate('payer', 'name')
+      .lean();
+
+    const matches = list.filter((e) => {
+      if (excludeExpenseId && String(e._id) === String(excludeExpenseId)) return false;
+      if (!sameCalendarDay(e.date, dateObj)) return false;
+      if (Math.abs(Number(e.amount) - amt) > 0.02) return false;
+      if (normalizeExpenseDescription(e.description) !== normDesc) return false;
+      return true;
+    }).slice(0, 5);
+
+    res.json({
+      matches: matches.map((e) => ({
+        _id: e._id,
+        description: e.description,
+        amount: e.amount,
+        date: e.date,
+        payer: e.payer,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Duplicate check failed' });
   }
 });
 

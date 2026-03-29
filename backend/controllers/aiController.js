@@ -350,7 +350,7 @@ export async function forecastNextMonth(req, res) {
   const nextMonth = monthToStr(addMonths(baseMonthDate, 1));
 
   try {
-    // Use months with actual data up to base month (avoids false doubling from a zero month).
+    // Use months with actual data up to base month.
     const months = await Expense.distinct("month", { group: groupId });
     const usableMonths = (months || [])
       .filter((m) => /^\d{4}-\d{2}$/.test(m) && m <= baseMonth)
@@ -365,38 +365,75 @@ export async function forecastNextMonth(req, res) {
       });
     }
 
-    const m1 = usableMonths[usableMonths.length - 1];
-    const m0 = usableMonths[usableMonths.length - 2] || null;
+    // Weighted 3-month average (latest month gets highest weight).
+    const recentMonths = usableMonths.slice(-3);
+    const monthExpenseRows = await Promise.all(
+      recentMonths.map((m) =>
+        Expense.find({ group: groupId, month: m }).populate("payer", "name").lean(),
+      ),
+    );
+    const monthTotals = monthExpenseRows.map((rows) =>
+      rows.reduce((s, e) => s + (e.amount || 0), 0),
+    );
 
-    const [e0, e1] = await Promise.all([
-      m0 ? Expense.find({ group: groupId, month: m0 }).lean() : Promise.resolve([]),
-      Expense.find({ group: groupId, month: m1 }).lean(),
-    ]);
+    const rawWeights = recentMonths.length === 1 ? [1] : recentMonths.length === 2 ? [0.4, 0.6] : [0.2, 0.3, 0.5];
+    const weightSum = rawWeights.reduce((s, w) => s + w, 0);
+    const weights = rawWeights.map((w) => w / weightSum);
+    const weightedTotal = monthTotals.reduce((s, v, i) => s + v * (weights[i] || 0), 0);
+    const forecast = Math.max(0, Math.round(weightedTotal * 100) / 100);
 
-    const total0 = e0.reduce((s, e) => s + (e.amount || 0), 0);
-    const total1 = e1.reduce((s, e) => s + (e.amount || 0), 0);
+    // Compare latest month vs previous for trend % (for display only).
+    const latestTotal = monthTotals[monthTotals.length - 1] || 0;
+    const prevTotal = monthTotals.length >= 2 ? monthTotals[monthTotals.length - 2] : 0;
+    const pct = prevTotal > 0 ? Math.round(((latestTotal - prevTotal) / prevTotal) * 1000) / 10 : null;
 
-    let forecast = Math.round(total1 * 100) / 100;
-    let pct = null;
-    if (m0 && total0 > 0) {
-      const delta = total1 - total0;
-      forecast = Math.max(0, Math.round((total1 + delta) * 100) / 100);
-      pct = Math.round(((total1 - total0) / total0) * 1000) / 10;
-    }
+    // Per-user forecast (weighted spend by payer across same recent months).
+    const userIds = group.members.map((m) => String(m.user?._id || m.user));
+    const userNames = new Map();
+    group.members.forEach((m) => {
+      const id = String(m.user?._id || m.user);
+      userNames.set(id, m.user?.name || id);
+    });
+    const perUserMonthTotals = {};
+    userIds.forEach((id) => {
+      perUserMonthTotals[id] = recentMonths.map(() => 0);
+    });
+    monthExpenseRows.forEach((rows, monthIdx) => {
+      rows.forEach((e) => {
+        const uid = String(e.payer?._id || e.payer);
+        if (perUserMonthTotals[uid]) {
+          perUserMonthTotals[uid][monthIdx] += Number(e.amount || 0);
+        }
+      });
+    });
+    const userForecast = userIds
+      .map((uid) => {
+        const series = perUserMonthTotals[uid] || [];
+        const weighted = series.reduce((s, v, i) => s + v * (weights[i] || 0), 0);
+        return {
+          userId: uid,
+          name: userNames.get(uid) || uid,
+          forecastAmount: Math.max(0, Math.round(weighted * 100) / 100),
+          recentMonthlySpent: series.map((v) => Math.round(v * 100) / 100),
+        };
+      })
+      .sort((a, b) => b.forecastAmount - a.forecastAmount);
 
     return res.json({
       groupName: group.name,
       nextMonth,
       forecast,
       basis: {
-        months: m0 ? [m0, m1] : [m1],
-        totals: [Math.round(total0 * 100) / 100, Math.round(total1 * 100) / 100],
+        months: recentMonths,
+        totals: monthTotals.map((v) => Math.round(v * 100) / 100),
+        weights,
         percentChange: pct,
-        method: m0 ? "simple-trend" : "last-month-carry-forward",
+        method: "weighted-3-month-average",
       },
+      userForecast,
       message:
-        `Estimated ${nextMonth} spend based on recent month data up to ${baseMonth}.` +
-        (pct != null ? ` Last month changed by ${pct}% vs the month before.` : " Added one month data only, so this is a carry-forward estimate."),
+        `Estimated ${nextMonth} spend using weighted recent months up to ${baseMonth}.` +
+        (pct != null ? ` Latest month changed by ${pct}% vs previous month.` : ""),
     });
   } catch (err) {
     console.error("forecastNextMonth:", err);

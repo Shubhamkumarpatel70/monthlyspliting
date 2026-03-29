@@ -40,6 +40,8 @@ const safeNumber = (value, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const LEDGER_PREVIEW_COUNT = 5;
+
 const getCategoryPillClass = (category) => {
   const c = String(category || "").toLowerCase();
   if (c === "food") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
@@ -77,6 +79,11 @@ export default function GroupDetail() {
 
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const [ledgerCategory, setLedgerCategory] = useState("");
+  const [ledgerPayerId, setLedgerPayerId] = useState("");
+  const [ledgerShowAll, setLedgerShowAll] = useState(false);
 
   const [addMemberOpen, setAddMemberOpen] = useState(false);
 
@@ -122,6 +129,58 @@ export default function GroupDetail() {
     });
     return map;
   }, [group]);
+
+  const ledgerCategoryOptions = useMemo(() => {
+    const set = new Set();
+    (expenses || []).forEach((e) => {
+      const label =
+        e.category === "Custom" && e.customCategory
+          ? e.customCategory
+          : e.category;
+      if (label) set.add(label);
+    });
+    return [...set].sort((a, b) => String(a).localeCompare(String(b)));
+  }, [expenses]);
+
+  const ledgerFiltersActive = Boolean(
+    ledgerSearch.trim() || ledgerCategory || ledgerPayerId,
+  );
+
+  const filteredLedgerExpenses = useMemo(() => {
+    let list = Array.isArray(expenses) ? [...expenses] : [];
+    const q = ledgerSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((e) =>
+        (e.description || "").toLowerCase().includes(q),
+      );
+    }
+    if (ledgerCategory) {
+      list = list.filter((e) => {
+        const label =
+          e.category === "Custom" && e.customCategory
+            ? e.customCategory
+            : e.category;
+        return label === ledgerCategory;
+      });
+    }
+    if (ledgerPayerId) {
+      list = list.filter(
+        (e) => String(e.payer?._id || e.payer) === ledgerPayerId,
+      );
+    }
+    list.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return list;
+  }, [expenses, ledgerSearch, ledgerCategory, ledgerPayerId]);
+
+  const visibleLedgerExpenses = useMemo(() => {
+    if (
+      ledgerShowAll ||
+      filteredLedgerExpenses.length <= LEDGER_PREVIEW_COUNT
+    ) {
+      return filteredLedgerExpenses;
+    }
+    return filteredLedgerExpenses.slice(0, LEDGER_PREVIEW_COUNT);
+  }, [filteredLedgerExpenses, ledgerShowAll]);
 
   const loadGroup = async () => {
     try {
@@ -255,6 +314,17 @@ export default function GroupDetail() {
     setAiForecast(null);
     setAiForecastError("");
   }, [selectedMonth, groupId]);
+
+  useEffect(() => {
+    setLedgerSearch("");
+    setLedgerCategory("");
+    setLedgerPayerId("");
+    setLedgerShowAll(false);
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    setLedgerShowAll(false);
+  }, [ledgerSearch, ledgerCategory, ledgerPayerId]);
 
   useEffect(() => {
     if (!groupId || !group) return;
@@ -1380,12 +1450,32 @@ export default function GroupDetail() {
                     Estimated <span className="font-semibold">{aiForecast.nextMonth}</span>{" "}
                     total: <span className="text-primary font-semibold">₹{toMoney(aiForecast.forecast)}</span>
                   </p>
-                  {aiForecast?.basis?.months?.length === 2 && (
+                  {Array.isArray(aiForecast?.basis?.months) && aiForecast.basis.months.length > 0 && (
                     <p className="text-xs text-textSecondary mt-1">
-                      Based on {aiForecast.basis.months[0]} (₹{toMoney(aiForecast.basis.totals?.[0])}) →{" "}
-                      {aiForecast.basis.months[1]} (₹{toMoney(aiForecast.basis.totals?.[1])})
-                      {aiForecast.basis.percentChange != null ? `, change ${aiForecast.basis.percentChange}%` : ""}.
+                      Based on{" "}
+                      {aiForecast.basis.months
+                        .map((m, i) => `${m} (₹${toMoney(aiForecast.basis.totals?.[i])})`)
+                        .join(" · ")}
+                      {Array.isArray(aiForecast.basis.weights)
+                        ? ` with weights ${aiForecast.basis.weights.map((w) => Math.round(w * 100)).join("% / ")}%`
+                        : ""}
+                      {aiForecast.basis.percentChange != null ? `, latest change ${aiForecast.basis.percentChange}%` : ""}.
                     </p>
+                  )}
+                  {Array.isArray(aiForecast?.userForecast) && aiForecast.userForecast.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-primary mb-2">
+                        Predicted user-wise spend
+                      </h4>
+                      <ul className="space-y-1.5">
+                        {aiForecast.userForecast.slice(0, 8).map((u) => (
+                          <li key={u.userId} className="text-sm text-textPrimary flex items-center justify-between gap-3">
+                            <span className="truncate">{u.name}</span>
+                            <span className="font-semibold text-primary">₹{toMoney(u.forecastAmount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
               )}
@@ -1426,7 +1516,16 @@ export default function GroupDetail() {
                 Expense ledger
                 {Array.isArray(expenses) && expenses.length > 0 && (
                   <span className="text-sm font-normal text-textSecondary">
-                    {expenses.length} in {displayMonth}
+                    {ledgerFiltersActive
+                      ? `${filteredLedgerExpenses.length} of ${expenses.length} in ${displayMonth}`
+                      : `${expenses.length} in ${displayMonth}`}
+                    {filteredLedgerExpenses.length > LEDGER_PREVIEW_COUNT &&
+                      !ledgerShowAll && (
+                        <span className="text-textSecondary/80">
+                          {" "}
+                          · latest {LEDGER_PREVIEW_COUNT}
+                        </span>
+                      )}
                   </span>
                 )}
               </h2>
@@ -1461,6 +1560,76 @@ export default function GroupDetail() {
               </p>
             )}
 
+            {Array.isArray(expenses) && expenses.length > 0 && (
+              <div className="px-4 sm:px-5 py-3 border-b border-white/5 flex flex-col sm:flex-row flex-wrap gap-3 sm:items-end">
+                <div className="flex-1 min-w-[160px]">
+                  <label className="block text-xs text-textSecondary mb-1">
+                    Search
+                  </label>
+                  <input
+                    type="search"
+                    value={ledgerSearch}
+                    onChange={(e) => setLedgerSearch(e.target.value)}
+                    placeholder="Description…"
+                    className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                </div>
+                <div className="w-full sm:w-40">
+                  <label className="block text-xs text-textSecondary mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={ledgerCategory}
+                    onChange={(e) => setLedgerCategory(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <option value="">All</option>
+                    {ledgerCategoryOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-full sm:w-44">
+                  <label className="block text-xs text-textSecondary mb-1">
+                    Payer
+                  </label>
+                  <select
+                    value={ledgerPayerId}
+                    onChange={(e) => setLedgerPayerId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <option value="">All</option>
+                    {(group?.members || []).map((m) => {
+                      const u = m.user;
+                      const id = u?._id || u;
+                      const idStr = id != null ? String(id) : "";
+                      if (!idStr) return null;
+                      return (
+                        <option key={idStr} value={idStr}>
+                          {u?.name || "Member"}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                {ledgerFiltersActive && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLedgerSearch("");
+                      setLedgerCategory("");
+                      setLedgerPayerId("");
+                    }}
+                    className="text-sm text-primary font-medium hover:underline py-2 sm:pb-2 self-start sm:self-auto"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
+
             {!Array.isArray(expenses) || expenses.length === 0 ? (
               <div className="px-4 sm:px-5 py-8 text-center">
                 <svg
@@ -1490,80 +1659,112 @@ export default function GroupDetail() {
                   </button>
                 )}
               </div>
+            ) : filteredLedgerExpenses.length === 0 ? (
+              <div className="px-4 sm:px-5 py-10 text-center">
+                <p className="text-textSecondary text-sm">
+                  No expenses match your filters.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLedgerSearch("");
+                    setLedgerCategory("");
+                    setLedgerPayerId("");
+                  }}
+                  className="mt-3 text-sm text-primary font-medium hover:underline"
+                >
+                  Clear filters
+                </button>
+              </div>
             ) : (
-              <ul className="divide-y divide-white/5">
-                {expenses.map((ex) => (
-                  <li
-                    key={ex._id}
-                    className="px-4 sm:px-5 py-3 sm:py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10 min-h-[52px]"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <span className="text-textPrimary font-medium block truncate">
-                        {ex.description}
-                      </span>
-                      <span className="text-textSecondary text-xs sm:text-sm">
-                        {ex.payer?.name ?? "Unknown"} ·{" "}
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 ${getCategoryPillClass(
-                            ex.category === "Custom" && ex.customCategory
+              <>
+                <ul className="divide-y divide-white/5">
+                  {visibleLedgerExpenses.map((ex) => (
+                    <li
+                      key={ex._id}
+                      className="px-4 sm:px-5 py-3 sm:py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10 min-h-[52px]"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="text-textPrimary font-medium block truncate">
+                          {ex.description}
+                        </span>
+                        <span className="text-textSecondary text-xs sm:text-sm">
+                          {ex.payer?.name ?? "Unknown"} ·{" "}
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 ${getCategoryPillClass(
+                              ex.category === "Custom" && ex.customCategory
+                                ? ex.customCategory
+                                : ex.category,
+                            )}`}
+                          >
+                            {ex.category === "Custom" && ex.customCategory
                               ? ex.customCategory
-                              : ex.category,
-                          )}`}
+                              : ex.category}
+                          </span>{" "}
+                          · {format(new Date(ex.date), "dd MMM")}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-primary font-semibold">
+                          ₹{toMoney(ex.amount)}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => canAddExpense && setEditingExpense(ex)}
+                          disabled={!canAddExpense}
+                          title={
+                            !canAddExpense
+                              ? "Can't edit - settlement is paid"
+                              : "Edit expense"
+                          }
+                          className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
+                            canAddExpense
+                              ? "text-textSecondary hover:text-primary hover:bg-white/5"
+                              : "text-textSecondary/40 cursor-not-allowed"
+                          }`}
                         >
-                          {ex.category === "Custom" && ex.customCategory
-                            ? ex.customCategory
-                            : ex.category}
-                        </span>{" "}
-                        · {format(new Date(ex.date), "dd MMM")}
-                      </span>
-                    </div>
+                          Edit
+                        </button>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-primary font-semibold">
-                        ₹{toMoney(ex.amount)}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() => canAddExpense && setEditingExpense(ex)}
-                        disabled={!canAddExpense}
-                        title={
-                          !canAddExpense
-                            ? "Can't edit - settlement is paid"
-                            : "Edit expense"
-                        }
-                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
-                          canAddExpense
-                            ? "text-textSecondary hover:text-primary hover:bg-white/5"
-                            : "text-textSecondary/40 cursor-not-allowed"
-                        }`}
-                      >
-                        Edit
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          canAddExpense && handleDeleteExpense(ex._id)
-                        }
-                        disabled={!canAddExpense}
-                        title={
-                          !canAddExpense
-                            ? "Can't delete - settlement is paid"
-                            : "Delete expense"
-                        }
-                        className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
-                          canAddExpense
-                            ? "text-danger hover:bg-danger/10"
-                            : "text-danger/40 cursor-not-allowed"
-                        }`}
-                      >
-                        Del
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            canAddExpense && handleDeleteExpense(ex._id)
+                          }
+                          disabled={!canAddExpense}
+                          title={
+                            !canAddExpense
+                              ? "Can't delete - settlement is paid"
+                              : "Delete expense"
+                          }
+                          className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
+                            canAddExpense
+                              ? "text-danger hover:bg-danger/10"
+                              : "text-danger/40 cursor-not-allowed"
+                          }`}
+                        >
+                          Del
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {filteredLedgerExpenses.length > LEDGER_PREVIEW_COUNT && (
+                  <div className="px-4 sm:px-5 py-3 border-t border-white/5 flex justify-center sm:justify-start">
+                    <button
+                      type="button"
+                      onClick={() => setLedgerShowAll((v) => !v)}
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      {ledgerShowAll
+                        ? "Show less"
+                        : `Show all (${filteredLedgerExpenses.length})`}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

@@ -292,6 +292,65 @@ Respond with JSON ONLY in this exact shape (no markdown):
   "savingsIdeas": ["string", "string", ...]
 }
 
+export async function forecastNextMonth(req, res) {
+  const { groupId } = req.body;
+  const g = await ensureGroupMember(req, groupId);
+  if (!g.ok) return jsonError(res, g.status, g.message);
+  const { group } = g;
+
+  // Forecast from last 2 months totals: simple linear projection
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+  const prev2Date = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  const prev2Month = `${prev2Date.getFullYear()}-${String(prev2Date.getMonth() + 1).padStart(2, "0")}`;
+
+  const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+
+  try {
+    const [m0, m1] = await Promise.all([
+      Expense.find({ group: groupId, month: prev2Month }).lean(),
+      Expense.find({ group: groupId, month: prevMonth }).lean(),
+    ]);
+    const total0 = m0.reduce((s, e) => s + (e.amount || 0), 0);
+    const total1 = m1.reduce((s, e) => s + (e.amount || 0), 0);
+
+    if (total0 <= 0 && total1 <= 0) {
+      return res.json({
+        nextMonth,
+        forecast: 0,
+        basis: { months: [prev2Month, prevMonth], totals: [total0, total1] },
+        message: "Not enough past data to forecast next month yet.",
+      });
+    }
+
+    const delta = total1 - total0;
+    const forecast = Math.max(0, Math.round((total1 + delta) * 100) / 100);
+    const pct =
+      total0 > 0 ? Math.round(((total1 - total0) / total0) * 1000) / 10 : null;
+
+    return res.json({
+      groupName: group.name,
+      nextMonth,
+      forecast,
+      basis: {
+        months: [prev2Month, prevMonth],
+        totals: [Math.round(total0 * 100) / 100, Math.round(total1 * 100) / 100],
+        percentChange: pct,
+        method: "simple-trend",
+      },
+      message:
+        `Estimated ${nextMonth} spend based on the last 2 months trend.` +
+        (pct != null ? ` Last month changed by ${pct}% vs the month before.` : ""),
+    });
+  } catch (err) {
+    console.error("forecastNextMonth:", err);
+    return jsonError(res, 500, err.message || "Failed to forecast next month.");
+  }
+}
+
 Rules for savingsIdeas (3–6 short bullets, each one line):
 - Every bullet MUST use this group's data (category names, ₹ amounts, or % from topCategoriesDetailed). No vague advice with no numbers.
 - If one category (especially Misc, Food, Shopping, Entertainment) is a large % of total, say how to cut it (e.g. split Misc into real labels, meal prep vs delivery, subscription audit).

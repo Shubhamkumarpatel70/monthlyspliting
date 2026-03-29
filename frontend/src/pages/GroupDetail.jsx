@@ -40,6 +40,23 @@ const safeNumber = (value, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const getCategoryPillClass = (category) => {
+  const c = String(category || "").toLowerCase();
+  if (c === "food") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
+  if (c === "groceries") return "bg-lime-500/15 text-lime-300 border-lime-500/25";
+  if (c === "travel") return "bg-sky-500/15 text-sky-300 border-sky-500/25";
+  if (c === "rent") return "bg-violet-500/15 text-violet-300 border-violet-500/25";
+  if (c === "bills" || c === "utilities")
+    return "bg-amber-500/15 text-amber-300 border-amber-500/25";
+  if (c === "shopping") return "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/25";
+  if (c === "entertainment")
+    return "bg-pink-500/15 text-pink-300 border-pink-500/25";
+  if (c === "health") return "bg-red-500/15 text-red-300 border-red-500/25";
+  if (c === "others") return "bg-slate-500/15 text-slate-200 border-slate-500/25";
+  if (c === "misc") return "bg-slate-400/10 text-slate-200 border-slate-400/20";
+  return "bg-white/5 text-textSecondary border-white/10";
+};
+
 export default function GroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
@@ -81,6 +98,9 @@ export default function GroupDetail() {
   const [aiSummarySavings, setAiSummarySavings] = useState([]);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [aiSummaryError, setAiSummaryError] = useState("");
+  const [aiForecast, setAiForecast] = useState(null);
+  const [aiForecastLoading, setAiForecastLoading] = useState(false);
+  const [aiForecastError, setAiForecastError] = useState("");
   const {
     onCooldown: aiSummaryOnCooldown,
     remainingSec: aiSummaryCooldownSec,
@@ -232,6 +252,8 @@ export default function GroupDetail() {
     setAiSummary("");
     setAiSummarySavings([]);
     setAiSummaryError("");
+    setAiForecast(null);
+    setAiForecastError("");
   }, [selectedMonth, groupId]);
 
   useEffect(() => {
@@ -303,6 +325,21 @@ export default function GroupDetail() {
       }
     } finally {
       setAiSummaryLoading(false);
+    }
+  };
+
+  const handleForecastNextMonth = async () => {
+    if (!groupId) return;
+    setAiForecastLoading(true);
+    setAiForecastError("");
+    try {
+      const res = await aiApi.forecastNextMonth({ groupId });
+      setAiForecast(res || null);
+    } catch (err) {
+      setAiForecast(null);
+      setAiForecastError(err.message || "Failed to forecast next month.");
+    } finally {
+      setAiForecastLoading(false);
     }
   };
 
@@ -1272,6 +1309,7 @@ export default function GroupDetail() {
                 Insights for the selected month using your group&apos;s expenses
                 and balances (not financial advice).
               </p>
+              <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={handleAiMonthSummary}
@@ -1309,6 +1347,15 @@ export default function GroupDetail() {
                   "Generate summary"
                 )}
               </button>
+              <button
+                type="button"
+                onClick={handleForecastNextMonth}
+                disabled={aiForecastLoading}
+                className="px-4 py-2.5 rounded-lg bg-surface border border-white/10 text-textPrimary text-sm font-medium hover:border-primary/30 disabled:opacity-60"
+              >
+                {aiForecastLoading ? "Forecasting…" : "Forecast next month"}
+              </button>
+              </div>
               {aiSummaryOnCooldown && !aiSummaryLoading && (
                 <p className="mt-2 text-xs text-textSecondary">
                   Short pause between AI requests helps avoid rate limits (429).
@@ -1317,6 +1364,27 @@ export default function GroupDetail() {
               {aiSummaryLoading && <AiMonthSummaryLoader />}
               {aiSummaryError && !aiSummaryLoading && (
                 <p className="mt-3 text-sm text-danger">{aiSummaryError}</p>
+              )}
+              {aiForecastError && !aiForecastLoading && (
+                <p className="mt-3 text-sm text-danger">{aiForecastError}</p>
+              )}
+              {aiForecast && (
+                <div className="mt-4 rounded-xl border border-white/10 bg-darkBg/40 p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-textSecondary mb-2">
+                    Upcoming month estimate
+                  </h3>
+                  <p className="text-sm text-textPrimary">
+                    Estimated <span className="font-semibold">{aiForecast.nextMonth}</span>{" "}
+                    total: <span className="text-primary font-semibold">₹{toMoney(aiForecast.forecast)}</span>
+                  </p>
+                  {aiForecast?.basis?.months?.length === 2 && (
+                    <p className="text-xs text-textSecondary mt-1">
+                      Based on {aiForecast.basis.months[0]} (₹{toMoney(aiForecast.basis.totals?.[0])}) →{" "}
+                      {aiForecast.basis.months[1]} (₹{toMoney(aiForecast.basis.totals?.[1])})
+                      {aiForecast.basis.percentChange != null ? `, change ${aiForecast.basis.percentChange}%` : ""}.
+                    </p>
+                  )}
+                </div>
               )}
               {aiSummary && (
                 <div
@@ -1420,7 +1488,7 @@ export default function GroupDetail() {
                 )}
               </div>
             ) : (
-              <ul className="divide-y divide-white/5 max-h-[min(70vh,900px)] overflow-y-auto overscroll-contain">
+              <ul className="divide-y divide-white/5">
                 {expenses.map((ex) => (
                   <li
                     key={ex._id}
@@ -1432,9 +1500,17 @@ export default function GroupDetail() {
                       </span>
                       <span className="text-textSecondary text-xs sm:text-sm">
                         {ex.payer?.name ?? "Unknown"} ·{" "}
-                        {ex.category === "Custom" && ex.customCategory
-                          ? ex.customCategory
-                          : ex.category}{" "}
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 ${getCategoryPillClass(
+                            ex.category === "Custom" && ex.customCategory
+                              ? ex.customCategory
+                              : ex.category,
+                          )}`}
+                        >
+                          {ex.category === "Custom" && ex.customCategory
+                            ? ex.customCategory
+                            : ex.category}
+                        </span>{" "}
                         · {format(new Date(ex.date), "dd MMM")}
                       </span>
                     </div>

@@ -44,6 +44,62 @@ export function computeBalances({
       paidByUser[key] += Number(e.amount);
   });
 
+  const toIdString = (x) => (x?._id || x?.id || x ? String(x._id || x.id || x) : "");
+
+  const getExpenseParticipants = (e) => {
+    const parts = Array.isArray(e?.participants)
+      ? e.participants.map(toIdString).filter(Boolean)
+      : [];
+    const unique = [...new Set(parts)];
+    const valid = unique.filter((id) => memberIds.includes(id));
+    return valid.length ? valid : memberIds;
+  };
+
+  const getExpenseShareMap = (e) => {
+    const amt = Number(e?.amount || 0);
+    const participants = getExpenseParticipants(e);
+    const splitType = e?.splitType || "equal";
+    const out = {};
+    if (!participants.length || amt <= 0) return out;
+
+    const valuesObj =
+      e?.splitValues && typeof e.splitValues === "object" ? e.splitValues : null;
+
+    if (splitType === "percentage" && valuesObj) {
+      participants.forEach((id) => {
+        const pct = Number(valuesObj[id] ?? 0);
+        if (Number.isFinite(pct) && pct > 0) out[id] = (amt * pct) / 100;
+      });
+      return out;
+    }
+
+    if (splitType === "exact" && valuesObj) {
+      participants.forEach((id) => {
+        const v = Number(valuesObj[id] ?? 0);
+        if (Number.isFinite(v) && v > 0) out[id] = v;
+      });
+      return out;
+    }
+
+    const per = amt / participants.length;
+    participants.forEach((id) => {
+      out[id] = per;
+    });
+    return out;
+  };
+
+  // Share owed by each member based on splits (defaults to equal across all)
+  const shareByUser = {};
+  memberIds.forEach((id) => {
+    shareByUser[id] = 0;
+  });
+  expenses.forEach((e) => {
+    const shareMap = getExpenseShareMap(e);
+    Object.entries(shareMap).forEach(([id, share]) => {
+      if (shareByUser[id] !== undefined) shareByUser[id] += Number(share) || 0;
+    });
+  });
+
   // Advances received by each member
   const advancesByUser = {};
   memberIds.forEach((id) => {
@@ -73,10 +129,11 @@ export function computeBalances({
   const balances = {};
   memberIds.forEach((id) => {
     const paid = +(paidByUser[id] ?? 0).toFixed(2);
-    const originalNet = +(paid - originalShare).toFixed(2);
+    const share = +(shareByUser[id] ?? originalShare).toFixed(2);
+    const originalNet = +(paid - share).toFixed(2);
     // Advance share: totalAdvance / numMembers
     // Final net: paid - finalShare
-    const finalNet = +(paid - finalShare).toFixed(2);
+    const finalNet = +(paid - share + advanceShare).toFixed(2);
     const settlement = +(settlementByUser[id] ?? 0).toFixed(2);
     let advanceReceived = +(advancesByUser[id] ?? 0).toFixed(2);
     // For single-member group, show totalAdvance as received
@@ -85,6 +142,7 @@ export function computeBalances({
     }
     balances[id] = {
       paid,
+      share,
       originalNet,
       advanceShare,
       advanceReceived,

@@ -19,9 +19,64 @@ function extractMonth(bodyDate) {
   return `${y}-${m}`;
 }
 
+function toIdString(x) {
+  if (!x) return "";
+  if (typeof x === "string") return x;
+  if (typeof x === "object" && x._id) return String(x._id);
+  return String(x);
+}
+
+function normalizeSplitPayload({ amount, memberIds, participants, splitType, splitValues }) {
+  const amt = Number(amount);
+  const allowedTypes = ["equal", "exact", "percentage"];
+  const type = allowedTypes.includes(splitType) ? splitType : "equal";
+
+  const partsRaw = Array.isArray(participants) ? participants : [];
+  const parts = partsRaw
+    .map(toIdString)
+    .filter(Boolean);
+  const uniqueParts = [...new Set(parts)];
+
+  const finalParticipants = uniqueParts.length ? uniqueParts : [...memberIds];
+  const allAreMembers = finalParticipants.every((id) => memberIds.includes(id));
+  if (!allAreMembers) {
+    return { ok: false, message: "Participants must be group members" };
+  }
+
+  const values = splitValues && typeof splitValues === "object" ? splitValues : null;
+
+  if (type === "equal") {
+    return { ok: true, participants: finalParticipants, splitType: "equal", splitValues: undefined };
+  }
+
+  if (!values) return { ok: false, message: "splitValues required for exact/percentage splits" };
+
+  // Coerce values map to numbers for participants only
+  const cleaned = {};
+  finalParticipants.forEach((id) => {
+    const v = values[id];
+    if (v != null && v !== "") cleaned[id] = Number(v);
+  });
+
+  if (type === "exact") {
+    const sum = Object.values(cleaned).reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0);
+    if (Math.abs(sum - amt) > 0.5) {
+      return { ok: false, message: "Exact split must sum to the expense amount" };
+    }
+    return { ok: true, participants: finalParticipants, splitType: "exact", splitValues: cleaned };
+  }
+
+  // percentage
+  const sumPct = Object.values(cleaned).reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0);
+  if (Math.abs(sumPct - 100) > 0.5) {
+    return { ok: false, message: "Percentage split must sum to 100" };
+  }
+  return { ok: true, participants: finalParticipants, splitType: "percentage", splitValues: cleaned };
+}
+
 router.post('/:groupId', groupMember, async (req, res) => {
   try {
-    const { description, amount, date, category, customCategory, aiGenerated, aiRawInput } = req.body;
+    const { description, amount, date, category, customCategory, aiGenerated, aiRawInput, participants, splitType, splitValues } = req.body;
     const payerId = req.body.payer || req.user._id;
     if (!description?.trim() || amount == null || amount < 0.01) {
       return res.status(400).json({ message: 'Description and positive amount required' });
@@ -31,6 +86,8 @@ router.post('/:groupId', groupMember, async (req, res) => {
     const memberIds = req.group.members.map(m => (m.user?._id || m.user).toString());
     const payerStr = payerId?.toString?.() || String(payerId);
     if (!memberIds.includes(payerStr)) return res.status(400).json({ message: 'Payer must be a group member' });
+    const split = normalizeSplitPayload({ amount, memberIds, participants, splitType, splitValues });
+    if (!split.ok) return res.status(400).json({ message: split.message });
     const cat = EXPENSE_CATEGORIES.includes(category) ? category : 'Misc';
     const expense = await Expense.create({
       group: req.params.groupId,
@@ -41,6 +98,9 @@ router.post('/:groupId', groupMember, async (req, res) => {
       month,
       category: cat,
       customCategory: cat === 'Custom' ? (customCategory || '').trim() : undefined,
+      participants: split.participants,
+      splitType: split.splitType,
+      splitValues: split.splitValues,
       aiGenerated: Boolean(aiGenerated),
       aiRawInput: typeof aiRawInput === 'string' ? aiRawInput.slice(0, 2000) : '',
       addedBy: req.user._id,
@@ -192,7 +252,7 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
       group: req.params.groupId,
     }).populate('payer', 'name');
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
-    const { description, amount, date, payer, category, customCategory, aiGenerated, aiRawInput } = req.body;
+    const { description, amount, date, payer, category, customCategory, aiGenerated, aiRawInput, participants, splitType, splitValues } = req.body;
     if (description?.trim()) expense.description = description.trim();
     if (amount != null && amount >= 0.01) expense.amount = Number(amount);
     if (date) {
@@ -206,6 +266,20 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
     if (category && EXPENSE_CATEGORIES.includes(category)) {
       expense.category = category;
       expense.customCategory = category === 'Custom' ? (customCategory || '').trim() : undefined;
+    }
+    if (participants || splitType || splitValues) {
+      const memberIds = req.group.members.map(m => (m.user?._id || m.user).toString());
+      const split = normalizeSplitPayload({
+        amount: expense.amount,
+        memberIds,
+        participants,
+        splitType,
+        splitValues,
+      });
+      if (!split.ok) return res.status(400).json({ message: split.message });
+      expense.participants = split.participants;
+      expense.splitType = split.splitType;
+      expense.splitValues = split.splitValues;
     }
     if (typeof aiGenerated === 'boolean') expense.aiGenerated = aiGenerated;
     if (typeof aiRawInput === 'string') expense.aiRawInput = aiRawInput.slice(0, 2000);

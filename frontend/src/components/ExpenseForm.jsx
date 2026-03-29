@@ -33,6 +33,24 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
   const [error, setError] = useState('');
   const [categoryTouched, setCategoryTouched] = useState(!!expense);
   const [nlSource, setNlSource] = useState('');
+  const memberOptions = group?.members ?? [];
+  const allMemberIds = memberOptions
+    .map((m) => String(m.user?._id || m.user))
+    .filter(Boolean);
+
+  const [participants, setParticipants] = useState(() => {
+    const parts = Array.isArray(expense?.participants)
+      ? expense.participants.map((p) => String(p?._id || p))
+      : [];
+    return parts.length ? parts : allMemberIds;
+  });
+  const [splitType, setSplitType] = useState(expense?.splitType ?? 'equal');
+  const [splitValues, setSplitValues] = useState(() => {
+    const v = expense?.splitValues && typeof expense.splitValues === 'object'
+      ? expense.splitValues
+      : {};
+    return { ...v };
+  });
 
   useEffect(() => {
     if (!payerId && group?.members?.length) {
@@ -54,6 +72,28 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
     setCategoryTouched(true);
     const matched = matchMemberIdByName(group, parsed.paidBy);
     if (matched) setPayerId(matched);
+  };
+
+  useEffect(() => {
+    // If group loads late, default participants to all members
+    if (!participants?.length && allMemberIds.length) {
+      setParticipants(allMemberIds);
+    }
+  }, [allMemberIds.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleParticipant = (id) => {
+    setParticipants((prev) => {
+      const set = new Set(prev);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      const next = [...set];
+      // keep at least 1
+      return next.length ? next : prev;
+    });
+  };
+
+  const setSplitValue = (userId, value) => {
+    setSplitValues((prev) => ({ ...prev, [userId]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -82,6 +122,9 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
         }
       }
 
+      const finalParticipants = participants?.length ? participants : allMemberIds;
+      if (!finalParticipants?.length) throw new Error('No participants selected.');
+
       await onSave({
         description: description.trim(),
         amount: amt,
@@ -89,6 +132,9 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
         payer: payerId ? String(payerId) : undefined,
         category: finalCategory === 'Custom' ? 'Custom' : finalCategory,
         customCategory: finalCategory === 'Custom' ? customCategory : undefined,
+        participants: finalParticipants,
+        splitType,
+        splitValues: splitType === 'equal' ? undefined : splitValues,
         aiGenerated: Boolean(nlSource) || usedAiCategory,
         aiRawInput: nlSource || undefined,
       });
@@ -99,7 +145,6 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
     }
   };
 
-  const memberOptions = group?.members ?? [];
   const groupId = group?._id;
 
   return (
@@ -163,6 +208,73 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
                 );
               })}
             </select>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-darkBg/40 p-4">
+            <p className="text-sm font-semibold text-textPrimary mb-2">Split among</p>
+            <div className="grid grid-cols-2 gap-2">
+              {memberOptions.map((m) => {
+                const u = m.user;
+                const id = u?._id || u;
+                const idStr = id != null ? String(id) : '';
+                const checked = participants.includes(idStr);
+                return (
+                  <label key={idStr} className="flex items-center gap-2 text-sm text-textSecondary">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleParticipant(idStr)}
+                      className="accent-primary"
+                      disabled={saving}
+                    />
+                    <span className="truncate">{u?.name || 'Member'}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-sm text-textSecondary mb-1">Split type</label>
+              <select
+                value={splitType}
+                onChange={(e) => setSplitType(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="equal">Equal</option>
+                <option value="exact">Exact amount (₹)</option>
+                <option value="percentage">Percentage (%)</option>
+              </select>
+            </div>
+
+            {(splitType === 'exact' || splitType === 'percentage') && (
+              <div className="mt-3 space-y-2">
+                {participants.map((id) => {
+                  const member = memberOptions.find((m) => String(m.user?._id || m.user) === id);
+                  const name = member?.user?.name || 'Member';
+                  const val = splitValues?.[id] ?? '';
+                  return (
+                    <div key={id} className="flex items-center gap-2">
+                      <span className="flex-1 text-sm text-textSecondary truncate">{name}</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={val}
+                        onChange={(e) => setSplitValue(id, e.target.value)}
+                        className="w-28 px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                        placeholder={splitType === 'exact' ? '₹' : '%'}
+                        disabled={saving}
+                      />
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-textSecondary">
+                  {splitType === 'exact'
+                    ? 'Exact amounts should add up to the expense amount.'
+                    : 'Percentages should add up to 100.'}
+                </p>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm text-textSecondary mb-1">Category</label>

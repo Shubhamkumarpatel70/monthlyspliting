@@ -192,6 +192,11 @@ export const ai = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  forecastNextMonth: (body) =>
+    request("/ai/forecast-next-month", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
 
 export const admin = {

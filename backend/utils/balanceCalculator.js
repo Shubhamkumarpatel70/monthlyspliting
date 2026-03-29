@@ -10,12 +10,64 @@ export function getMonthFromDate(date) {
   return `${y}-${m}`;
 }
 
+function toIdString(x) {
+  if (!x) return "";
+  if (typeof x === "string") return x;
+  if (typeof x === "object" && x._id) return String(x._id);
+  return String(x);
+}
+
+function getExpenseParticipants(expense, memberIds) {
+  const parts = Array.isArray(expense?.participants)
+    ? expense.participants.map(toIdString).filter(Boolean)
+    : [];
+  const unique = [...new Set(parts)];
+  const valid = unique.filter((id) => memberIds.includes(id));
+  return valid.length ? valid : memberIds;
+}
+
+function getExpenseShareMap(expense, memberIds) {
+  const amt = Number(expense?.amount || 0);
+  const participants = getExpenseParticipants(expense, memberIds);
+  const splitType = expense?.splitType || "equal";
+  const out = {};
+
+  if (!participants.length || amt <= 0) return out;
+
+  // Mongoose Map can serialize to object; handle both
+  const valuesObj =
+    expense?.splitValues && typeof expense.splitValues === "object"
+      ? expense.splitValues instanceof Map
+        ? Object.fromEntries(expense.splitValues.entries())
+        : expense.splitValues
+      : null;
+
+  if (splitType === "percentage" && valuesObj) {
+    participants.forEach((id) => {
+      const pct = Number(valuesObj[id] ?? 0);
+      if (Number.isFinite(pct) && pct > 0) out[id] = (amt * pct) / 100;
+    });
+    return out;
+  }
+
+  if (splitType === "exact" && valuesObj) {
+    participants.forEach((id) => {
+      const v = Number(valuesObj[id] ?? 0);
+      if (Number.isFinite(v) && v > 0) out[id] = v;
+    });
+    return out;
+  }
+
+  // default: equal split
+  const per = amt / participants.length;
+  participants.forEach((id) => {
+    out[id] = per;
+  });
+  return out;
+}
+
 export function computeMonthlyBalances(expenses, memberIds, advances = []) {
-  console.log("DEBUG: memberIds", memberIds);
-  console.log(
-    "DEBUG: expenses",
-    expenses.map((e) => ({ payer: e.payer, amount: e.amount })),
-  );
+  const memberIdStrs = (memberIds || []).map((id) => id.toString());
   if (!memberIds?.length) {
     return {
       totalExpense: 0,
@@ -29,11 +81,12 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
   const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
   const totalAdvance = advances.reduce((sum, a) => sum + a.amount, 0);
   const numMembers = memberIds.length;
+  // Backwards-compatible "originalShare" (equal split across all members)
   const originalShare = numMembers > 0 ? totalExpense / numMembers : 0;
   const advanceShare = numMembers > 0 ? totalAdvance / numMembers : 0;
 
   const effectiveExpense = totalExpense - totalAdvance;
-  let finalShare = 0;
+  let finalShare = 0; // legacy per-person share after advances
   let surplusCredit = 0;
 
   if (effectiveExpense > 0 && numMembers > 0) {
@@ -45,8 +98,8 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
     }
   }
   const paidByUser = {};
-  memberIds.forEach((id) => {
-    paidByUser[id.toString()] = 0;
+  memberIdStrs.forEach((id) => {
+    paidByUser[id] = 0;
   });
   expenses.forEach((e) => {
     let key;
@@ -57,16 +110,25 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
     }
     if (key && paidByUser[key] !== undefined) {
       paidByUser[key] += e.amount;
-    } else {
-      console.log("DEBUG: payer not matched", key, paidByUser);
     }
   });
+
+  // Share owed by each member (based on per-expense participants + splitType)
+  const shareByUser = {};
+  memberIdStrs.forEach((id) => (shareByUser[id] = 0));
+  expenses.forEach((e) => {
+    const shareMap = getExpenseShareMap(e, memberIdStrs);
+    Object.entries(shareMap).forEach(([id, share]) => {
+      if (shareByUser[id] !== undefined) shareByUser[id] += Number(share) || 0;
+    });
+  });
+
   const balances = {};
   let netSum = 0;
   // Calculate advances received by each member
   const advancesByUser = {};
-  memberIds.forEach((id) => {
-    advancesByUser[id.toString()] = 0;
+  memberIdStrs.forEach((id) => {
+    advancesByUser[id] = 0;
   });
   advances.forEach((a) => {
     const key = a.user?._id?.toString() || a.user?.toString() || a.user;
@@ -75,17 +137,19 @@ export function computeMonthlyBalances(expenses, memberIds, advances = []) {
     }
   });
 
-  memberIds.forEach((id) => {
-    const idStr = id.toString();
+  memberIdStrs.forEach((idStr) => {
     const paid = paidByUser[idStr] ?? 0;
-    const originalNet = paid - originalShare;
-    const finalNet = paid - finalShare;
+    const share = shareByUser[idStr] ?? 0;
+    const originalNet = paid - share;
+    // Apply advances equally as shared credit
+    const finalNet = paid - share + advanceShare;
     const advanceReceived = advancesByUser[idStr] ?? 0;
     let status = "-";
     if (finalNet < 0) status = `Pays ₹${Math.abs(finalNet).toFixed(2)}`;
     else if (finalNet > 0) status = `Gets ₹${finalNet.toFixed(2)}`;
     balances[idStr] = {
       paid,
+      share,
       originalNet,
       advanceShare,
       advanceReceived,

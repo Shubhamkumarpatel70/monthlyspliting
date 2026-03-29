@@ -292,6 +292,44 @@ Respond with JSON ONLY in this exact shape (no markdown):
   "savingsIdeas": ["string", "string", ...]
 }
 
+Rules for savingsIdeas (3–6 short bullets, each one line):
+- Every bullet MUST use this group's data (category names, ₹ amounts, or % from topCategoriesDetailed). No vague advice with no numbers.
+- If one category (especially Misc, Food, Shopping, Entertainment) is a large % of total, say how to cut it (e.g. split Misc into real labels, meal prep vs delivery, subscription audit).
+- If spending rose vs last month, point to categories in topCategoriesDetailed that grew and give one concrete savings step each.
+- If miscCategoryPercentOfTotal is high (>25%), urge clearer categories + a monthly cap for "Misc".
+- Include at least one idea that is clearly about "where to save" money next month, not only describing past spend.
+- Tone: practical, friendly, India-relevant where natural (UPI, local markets, etc.).`;
+
+    const out = await groqChatJson({
+      system,
+      user: JSON.stringify(payload),
+      maxOutputTokens: 2560,
+    });
+    const summary =
+      typeof out.summary === "string" && out.summary.trim()
+        ? out.summary.trim()
+        : "Summary unavailable.";
+    const savingsIdeas = Array.isArray(out.savingsIdeas)
+      ? out.savingsIdeas
+          .filter((s) => typeof s === "string" && s.trim())
+          .map((s) => s.trim())
+          .slice(0, 8)
+      : [];
+    return res.json({
+      summary,
+      savingsIdeas,
+      meta: { month, groupName: group.name },
+    });
+  } catch (err) {
+    console.error("monthSummary:", err);
+    return jsonError(
+      res,
+      503,
+      aiFailureMessage(err, "Could not generate monthly summary."),
+    );
+  }
+}
+
 export async function forecastNextMonth(req, res) {
   const { groupId } = req.body;
   const g = await ensureGroupMember(req, groupId);
@@ -300,7 +338,6 @@ export async function forecastNextMonth(req, res) {
 
   // Forecast from last 2 months totals: simple linear projection
   const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
   const prev2Date = new Date(now.getFullYear(), now.getMonth() - 2, 1);
@@ -348,43 +385,5 @@ export async function forecastNextMonth(req, res) {
   } catch (err) {
     console.error("forecastNextMonth:", err);
     return jsonError(res, 500, err.message || "Failed to forecast next month.");
-  }
-}
-
-Rules for savingsIdeas (3–6 short bullets, each one line):
-- Every bullet MUST use this group's data (category names, ₹ amounts, or % from topCategoriesDetailed). No vague advice with no numbers.
-- If one category (especially Misc, Food, Shopping, Entertainment) is a large % of total, say how to cut it (e.g. split Misc into real labels, meal prep vs delivery, subscription audit).
-- If spending rose vs last month, point to categories in topCategoriesDetailed that grew and give one concrete savings step each.
-- If miscCategoryPercentOfTotal is high (>25%), urge clearer categories + a monthly cap for "Misc".
-- Include at least one idea that is clearly about "where to save" money next month, not only describing past spend.
-- Tone: practical, friendly, India-relevant where natural (UPI, local markets, etc.).`;
-
-    const out = await groqChatJson({
-      system,
-      user: JSON.stringify(payload),
-      maxOutputTokens: 2560,
-    });
-    const summary =
-      typeof out.summary === "string" && out.summary.trim()
-        ? out.summary.trim()
-        : "Summary unavailable.";
-    const savingsIdeas = Array.isArray(out.savingsIdeas)
-      ? out.savingsIdeas
-          .filter((s) => typeof s === "string" && s.trim())
-          .map((s) => s.trim())
-          .slice(0, 8)
-      : [];
-    return res.json({
-      summary,
-      savingsIdeas,
-      meta: { month, groupName: group.name },
-    });
-  } catch (err) {
-    console.error("monthSummary:", err);
-    return jsonError(
-      res,
-      503,
-      aiFailureMessage(err, "Could not generate monthly summary."),
-    );
   }
 }

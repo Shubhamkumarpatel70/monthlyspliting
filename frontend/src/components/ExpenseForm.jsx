@@ -219,11 +219,6 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
           {error && (
             <div className="p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">{error}</div>
           )}
-</think>
-Fixing a typo in ExpenseForm (broken JSX).
-
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-Read
           <div>
             <label className="block text-sm text-textSecondary mb-1">Description</label>
             <input

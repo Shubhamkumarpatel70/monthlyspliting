@@ -331,56 +331,72 @@ Rules for savingsIdeas (3–6 short bullets, each one line):
 }
 
 export async function forecastNextMonth(req, res) {
-  const { groupId } = req.body;
+  const { groupId, month: monthHint } = req.body;
   const g = await ensureGroupMember(req, groupId);
   if (!g.ok) return jsonError(res, g.status, g.message);
   const { group } = g;
 
-  // Forecast from last 2 months totals: simple linear projection
-  const now = new Date();
-  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
-  const prev2Date = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const prev2Month = `${prev2Date.getFullYear()}-${String(prev2Date.getMonth() + 1).padStart(2, "0")}`;
+  const parseMonth = (yyyyMm) => {
+    if (typeof yyyyMm !== "string" || !/^\d{4}-\d{2}$/.test(yyyyMm)) return null;
+    const [y, m] = yyyyMm.split("-").map(Number);
+    return new Date(y, m - 1, 1);
+  };
+  const monthToStr = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
 
-  const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const nextMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+  const baseMonthDate = parseMonth(monthHint) || new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const baseMonth = monthToStr(baseMonthDate);
+  const nextMonth = monthToStr(addMonths(baseMonthDate, 1));
 
   try {
-    const [m0, m1] = await Promise.all([
-      Expense.find({ group: groupId, month: prev2Month }).lean(),
-      Expense.find({ group: groupId, month: prevMonth }).lean(),
-    ]);
-    const total0 = m0.reduce((s, e) => s + (e.amount || 0), 0);
-    const total1 = m1.reduce((s, e) => s + (e.amount || 0), 0);
+    // Use months with actual data up to base month (avoids false doubling from a zero month).
+    const months = await Expense.distinct("month", { group: groupId });
+    const usableMonths = (months || [])
+      .filter((m) => /^\d{4}-\d{2}$/.test(m) && m <= baseMonth)
+      .sort();
 
-    if (total0 <= 0 && total1 <= 0) {
+    if (!usableMonths.length) {
       return res.json({
         nextMonth,
         forecast: 0,
-        basis: { months: [prev2Month, prevMonth], totals: [total0, total1] },
+        basis: { months: [], totals: [] },
         message: "Not enough past data to forecast next month yet.",
       });
     }
 
-    const delta = total1 - total0;
-    const forecast = Math.max(0, Math.round((total1 + delta) * 100) / 100);
-    const pct =
-      total0 > 0 ? Math.round(((total1 - total0) / total0) * 1000) / 10 : null;
+    const m1 = usableMonths[usableMonths.length - 1];
+    const m0 = usableMonths[usableMonths.length - 2] || null;
+
+    const [e0, e1] = await Promise.all([
+      m0 ? Expense.find({ group: groupId, month: m0 }).lean() : Promise.resolve([]),
+      Expense.find({ group: groupId, month: m1 }).lean(),
+    ]);
+
+    const total0 = e0.reduce((s, e) => s + (e.amount || 0), 0);
+    const total1 = e1.reduce((s, e) => s + (e.amount || 0), 0);
+
+    let forecast = Math.round(total1 * 100) / 100;
+    let pct = null;
+    if (m0 && total0 > 0) {
+      const delta = total1 - total0;
+      forecast = Math.max(0, Math.round((total1 + delta) * 100) / 100);
+      pct = Math.round(((total1 - total0) / total0) * 1000) / 10;
+    }
 
     return res.json({
       groupName: group.name,
       nextMonth,
       forecast,
       basis: {
-        months: [prev2Month, prevMonth],
+        months: m0 ? [m0, m1] : [m1],
         totals: [Math.round(total0 * 100) / 100, Math.round(total1 * 100) / 100],
         percentChange: pct,
-        method: "simple-trend",
+        method: m0 ? "simple-trend" : "last-month-carry-forward",
       },
       message:
-        `Estimated ${nextMonth} spend based on the last 2 months trend.` +
-        (pct != null ? ` Last month changed by ${pct}% vs the month before.` : ""),
+        `Estimated ${nextMonth} spend based on recent month data up to ${baseMonth}.` +
+        (pct != null ? ` Last month changed by ${pct}% vs the month before.` : " Added one month data only, so this is a carry-forward estimate."),
     });
   } catch (err) {
     console.error("forecastNextMonth:", err);

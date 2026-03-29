@@ -333,7 +333,10 @@ export default function GroupDetail() {
     setAiForecastLoading(true);
     setAiForecastError("");
     try {
-      const res = await aiApi.forecastNextMonth({ groupId });
+      const res = await aiApi.forecastNextMonth({
+        groupId,
+        month: selectedMonth || undefined,
+      });
       setAiForecast(res || null);
     } catch (err) {
       setAiForecast(null);

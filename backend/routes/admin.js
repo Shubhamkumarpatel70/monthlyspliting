@@ -1,10 +1,38 @@
 import express from "express";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Otp from "../models/Otp.js";
 import Group from "../models/Group.js";
 import Expense from "../models/Expense.js";
 import Payment from "../models/Payment.js";
 import { protect, isAdmin } from "../middleware/auth.js";
+
+function expenseAdminFilter({
+  groupId = "",
+  month = "",
+  payerId = "",
+  category = "",
+  search = "",
+}) {
+  const query = {};
+  if (groupId && mongoose.Types.ObjectId.isValid(groupId)) {
+    query.group = groupId;
+  }
+  if (month && /^\d{4}-\d{2}$/.test(String(month).trim())) {
+    query.month = String(month).trim();
+  }
+  if (payerId && mongoose.Types.ObjectId.isValid(payerId)) {
+    query.payer = payerId;
+  }
+  if (category && String(category).trim()) {
+    query.category = String(category).trim();
+  }
+  const q = search && String(search).trim();
+  if (q) {
+    query.description = { $regex: q, $options: "i" };
+  }
+  return query;
+}
 
 const router = express.Router();
 
@@ -21,6 +49,8 @@ router.get("/stats", async (req, res) => {
       verifiedUsers,
       totalGroups,
       totalExpenses,
+      expenseVolumeAgg,
+      recentExpenses,
       totalOTPs,
       activeOTPs,
       recentUsers,
@@ -30,6 +60,15 @@ router.get("/stats", async (req, res) => {
       User.countDocuments({ emailVerified: true }),
       Group.countDocuments(),
       Expense.countDocuments(),
+      Expense.aggregate([
+        { $group: { _id: null, totalAmount: { $sum: "$amount" } } },
+      ]),
+      Expense.find()
+        .populate("payer", "name email")
+        .populate("group", "name")
+        .sort({ date: -1, createdAt: -1 })
+        .limit(5)
+        .select("description amount date month category customCategory group payer"),
       Otp.countDocuments(),
       Otp.countDocuments({ verified: false, expiresAt: { $gt: new Date() } }),
       User.find()
@@ -37,6 +76,8 @@ router.get("/stats", async (req, res) => {
         .limit(5)
         .select("name email mobile emailVerified createdAt"),
     ]);
+
+    const totalExpenseAmount = expenseVolumeAgg[0]?.totalAmount || 0;
 
     res.json({
       users: {
@@ -50,6 +91,8 @@ router.get("/stats", async (req, res) => {
       },
       expenses: {
         total: totalExpenses,
+        totalAmount: totalExpenseAmount,
+        recent: recentExpenses,
       },
       otps: {
         total: totalOTPs,
@@ -287,32 +330,60 @@ router.delete("/groups/:id", async (req, res) => {
   }
 });
 
-// Expense Management
+// Expense Management — all expenses system-wide with filters
 router.get("/expenses", async (req, res) => {
   try {
-    const { page = 1, limit = 50, groupId = "" } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const {
+      page = 1,
+      limit = 50,
+      groupId = "",
+      month = "",
+      payerId = "",
+      category = "",
+      search = "",
+    } = req.query;
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const skip = (pageNum - 1) * limitNum;
 
-    const query = {};
-    if (groupId) query.group = groupId;
+    const query = expenseAdminFilter({
+      groupId,
+      month,
+      payerId,
+      category,
+      search,
+    });
 
-    const [expenses, total] = await Promise.all([
+    const [expenses, total, sumAgg] = await Promise.all([
       Expense.find(query)
-        .populate("payer", "name email")
+        .populate("payer", "name email mobile")
         .populate("group", "name")
-        .sort({ createdAt: -1 })
+        .populate("addedBy", "name email")
+        .sort({ date: -1, createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(limitNum)
+        .lean(),
       Expense.countDocuments(query),
+      Expense.aggregate([
+        { $match: query },
+        { $group: { _id: null, totalAmount: { $sum: "$amount" } } },
+      ]),
     ]);
+
+    const totalAmount = sumAgg[0]?.totalAmount || 0;
 
     res.json({
       expenses,
+      summary: {
+        count: total,
+        totalAmount,
+        filtersMatchCount: total,
+      },
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / parseInt(limit)),
+        pages: Math.ceil(total / limitNum) || 1,
       },
     });
   } catch (err) {

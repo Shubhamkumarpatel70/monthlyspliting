@@ -1685,9 +1685,19 @@ export default function GroupDetail() {
                       className="px-4 sm:px-5 py-3 sm:py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10 min-h-[52px]"
                     >
                       <div className="flex-1 min-w-0">
-                        <span className="text-textPrimary font-medium block truncate">
-                          {ex.description}
-                        </span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-textPrimary font-medium truncate">
+                            {ex.description}
+                          </span>
+                          {ex.aiGenerated && (
+                            <span
+                              className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90"
+                              title="Parsed or categorized with AI"
+                            >
+                              AI
+                            </span>
+                          )}
+                        </div>
                         <span className="text-textSecondary text-xs sm:text-sm">
                           {ex.payer?.name ?? "Unknown"} ·{" "}
                           <span

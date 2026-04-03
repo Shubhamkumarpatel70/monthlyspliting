@@ -305,6 +305,14 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
       group: req.params.groupId,
     }).populate('payer', 'name');
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    if (
+      expense.addedBy &&
+      expense.addedBy.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        message: 'Only the member who added this expense can edit it',
+      });
+    }
     const { description, amount, date, payer, category, customCategory, aiGenerated, aiRawInput, participants, splitType, splitValues } = req.body;
     if (description?.trim()) expense.description = description.trim();
     if (amount != null && amount >= 0.01) expense.amount = Number(amount);
@@ -348,11 +356,20 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
 
 router.delete('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
   try {
-    const expense = await Expense.findOneAndDelete({
+    const expense = await Expense.findOne({
       _id: req.params.expenseId,
       group: req.params.groupId,
     });
     if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    if (
+      expense.addedBy &&
+      expense.addedBy.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        message: 'Only the member who added this expense can delete it',
+      });
+    }
+    await Expense.deleteOne({ _id: expense._id });
     res.json({ message: 'Expense deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to delete expense' });

@@ -42,6 +42,13 @@ const safeNumber = (value, fallback = 0) => {
 
 const LEDGER_PREVIEW_COUNT = 5;
 
+/** Who created the expense row (for edit/delete permission). */
+function expenseAddedById(ex) {
+  const a = ex?.addedBy;
+  if (a == null) return null;
+  return typeof a === "object" && a._id != null ? String(a._id) : String(a);
+}
+
 const getCategoryPillClass = (category) => {
   const c = String(category || "").toLowerCase();
   if (c === "food") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
@@ -655,6 +662,14 @@ export default function GroupDetail() {
 
   const settlementStatus = settlement?.status ?? "pending";
   const canAddExpense = settlementStatus === "pending";
+
+  /** Edit/delete only for the member who added the row (legacy rows without addedBy: any member). */
+  const canModifyLedgerExpense = (ex) => {
+    if (!canAddExpense) return false;
+    const addedBy = expenseAddedById(ex);
+    if (!addedBy) return true;
+    return user?._id != null && String(user._id) === addedBy;
+  };
 
   const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
   const monthOptions = [...new Set([...months, currentMonthStr])]
@@ -1712,6 +1727,15 @@ export default function GroupDetail() {
                               : ex.category}
                           </span>{" "}
                           · {format(new Date(ex.date), "dd MMM")}
+                          {ex.addedBy?.name && (
+                            <>
+                              {" "}
+                              · Added by{" "}
+                              <span className="text-textPrimary/90">
+                                {ex.addedBy.name}
+                              </span>
+                            </>
+                          )}
                         </span>
                       </div>
 
@@ -1722,40 +1746,75 @@ export default function GroupDetail() {
 
                         <button
                           type="button"
-                          onClick={() => canAddExpense && setEditingExpense(ex)}
-                          disabled={!canAddExpense}
+                          onClick={() =>
+                            canModifyLedgerExpense(ex) && setEditingExpense(ex)
+                          }
+                          disabled={!canModifyLedgerExpense(ex)}
                           title={
                             !canAddExpense
                               ? "Can't edit - settlement is paid"
-                              : "Edit expense"
+                              : !canModifyLedgerExpense(ex)
+                                ? "Only the member who added this expense can edit it"
+                                : "Edit expense"
                           }
-                          className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
-                            canAddExpense
+                          className={`inline-flex items-center gap-1.5 min-h-[36px] px-2.5 rounded-lg text-sm touch-manipulation ${
+                            canModifyLedgerExpense(ex)
                               ? "text-textSecondary hover:text-primary hover:bg-white/5"
                               : "text-textSecondary/40 cursor-not-allowed"
                           }`}
                         >
+                          <svg
+                            className="w-4 h-4 shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            />
+                          </svg>
                           Edit
                         </button>
 
                         <button
                           type="button"
                           onClick={() =>
-                            canAddExpense && handleDeleteExpense(ex._id)
+                            canModifyLedgerExpense(ex) &&
+                            handleDeleteExpense(ex._id)
                           }
-                          disabled={!canAddExpense}
+                          disabled={!canModifyLedgerExpense(ex)}
                           title={
                             !canAddExpense
                               ? "Can't delete - settlement is paid"
-                              : "Delete expense"
+                              : !canModifyLedgerExpense(ex)
+                                ? "Only the member who added this expense can delete it"
+                                : "Delete expense"
                           }
-                          className={`min-h-[36px] min-w-[44px] px-2 rounded-lg text-sm touch-manipulation ${
-                            canAddExpense
+                          className={`inline-flex items-center gap-1.5 min-h-[36px] px-2.5 rounded-lg text-sm touch-manipulation ${
+                            canModifyLedgerExpense(ex)
                               ? "text-danger hover:bg-danger/10"
                               : "text-danger/40 cursor-not-allowed"
                           }`}
                         >
-                          Del
+                          <svg
+                            className="w-4 h-4 shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                          Delete
                         </button>
                       </div>
                     </li>

@@ -127,10 +127,26 @@ export default function Expenses() {
 
   const handleEdit = (expense) => {
     console.log("Edit expense:", expense);
+    console.log(
+      "Current user ID:",
+      user?._id,
+      "Expense payer ID:",
+      expense.payer?._id,
+      "Match:",
+      user?._id === expense.payer?._id,
+    );
   };
 
   const handleDelete = (expense) => {
     console.log("Delete expense:", expense);
+    console.log(
+      "Current user ID:",
+      user?._id,
+      "Expense payer ID:",
+      expense.payer?._id,
+      "Match:",
+      user?._id === expense.payer?._id,
+    );
   };
 
   return (
@@ -397,7 +413,7 @@ export default function Expenses() {
                             type="button"
                             onClick={() => handleEdit(expense)}
                             disabled={user?._id !== expense.payer?._id}
-                            className="p-2 rounded-lg border border-white/10 bg-surface text-primary disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/5"
+                            className="p-2 rounded-lg border border-white/10 bg-surface text-primary disabled:text-gray-400 disabled:bg-gray-900/50 disabled:cursor-not-allowed hover:bg-white/5 disabled:hover:bg-gray-900/20"
                             title={
                               user?._id !== expense.payer?._id
                                 ? "You can only edit your own entries"
@@ -410,7 +426,7 @@ export default function Expenses() {
                             type="button"
                             onClick={() => handleDelete(expense)}
                             disabled={user?._id !== expense.payer?._id}
-                            className="p-2 rounded-lg border border-white/10 bg-surface text-danger disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/5"
+                            className="p-2 rounded-lg border border-white/10 bg-surface text-danger disabled:text-gray-500 disabled:bg-gray-900/50 disabled:cursor-not-allowed hover:bg-white/5 disabled:hover:bg-gray-900/20"
                             title={
                               user?._id !== expense.payer?._id
                                 ? "You can only delete your own entries"

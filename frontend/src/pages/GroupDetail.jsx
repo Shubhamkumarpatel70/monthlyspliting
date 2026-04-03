@@ -49,6 +49,17 @@ function expenseAddedById(ex) {
   return typeof a === "object" && a._id != null ? String(a._id) : String(a);
 }
 
+function ledgerPayerId(ex) {
+  const p = ex?.payer;
+  if (p == null) return "";
+  return typeof p === "object" && p._id != null ? String(p._id) : String(p);
+}
+
+function ledgerCategoryLabel(ex) {
+  if (ex?.category === "Custom" && ex?.customCategory) return ex.customCategory;
+  return ex?.category || "Misc";
+}
+
 const getCategoryPillClass = (category) => {
   const c = String(category || "").toLowerCase();
   if (c === "food") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
@@ -1700,49 +1711,46 @@ export default function GroupDetail() {
                       className="px-4 sm:px-5 py-3.5 sm:py-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 hover:bg-white/5 active:bg-white/10"
                     >
                       <div className="w-full min-w-0 sm:flex-1 space-y-1.5">
-                        <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
-                          <span className="text-textPrimary font-medium text-[15px] sm:text-base leading-snug break-words [overflow-wrap:anywhere] min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                          <span className="text-textPrimary font-medium text-[15px] sm:text-base leading-snug break-words [overflow-wrap:anywhere] min-w-0">
                             {ex.description}
+                          </span>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 shrink-0 ${getCategoryPillClass(
+                              ledgerCategoryLabel(ex),
+                            )}`}
+                          >
+                            {ledgerCategoryLabel(ex)}
                           </span>
                           {ex.aiGenerated && (
                             <span
-                              className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90 self-center"
+                              className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90"
                               title="Parsed or categorized with AI"
                             >
                               AI
                             </span>
                           )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs sm:text-sm text-textSecondary">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-textSecondary">
                           <span className="font-medium text-textPrimary/85 max-w-full break-words">
                             {ex.payer?.name ?? "Unknown"}
                           </span>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 shrink-0 ${getCategoryPillClass(
-                              ex.category === "Custom" && ex.customCategory
-                                ? ex.customCategory
-                                : ex.category,
-                            )}`}
-                          >
-                            {ex.category === "Custom" && ex.customCategory
-                              ? ex.customCategory
-                              : ex.category}
-                          </span>
-                          <span
-                            className="tabular-nums text-textSecondary whitespace-nowrap shrink-0"
-                          >
+                          <span className="text-textSecondary/50">·</span>
+                          <span className="tabular-nums whitespace-nowrap shrink-0">
                             {format(new Date(ex.date), "dd MMM yyyy")}
                           </span>
-                          {ex.addedBy?.name && (
-                            <span className="basis-full sm:basis-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-textSecondary min-w-0">
-                              <span className="whitespace-nowrap shrink-0 text-textSecondary/90">
-                                Added by
+                          {ex.addedBy?.name &&
+                            ledgerPayerId(ex) !== expenseAddedById(ex) && (
+                              <span className="basis-full sm:basis-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-textSecondary min-w-0 sm:mt-0">
+                                <span className="text-textSecondary/50">·</span>
+                                <span className="whitespace-nowrap shrink-0 text-textSecondary/90">
+                                  Added by
+                                </span>
+                                <span className="text-textPrimary/90 font-medium break-words min-w-0">
+                                  {ex.addedBy.name}
+                                </span>
                               </span>
-                              <span className="text-textPrimary/90 font-medium break-words min-w-0">
-                                {ex.addedBy.name}
-                              </span>
-                            </span>
-                          )}
+                            )}
                         </div>
                       </div>
 

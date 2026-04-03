@@ -35,6 +35,15 @@ const formatExpenseDate = (d) => {
   });
 };
 
+const formatYearMonthLabel = (ym) => {
+  if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return null;
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+};
+
 const formatDateTime = (d) => {
   if (!d) return "—";
   return new Date(d).toLocaleString("en-IN", {
@@ -184,8 +193,10 @@ export default function Expenses() {
           </h1>
           <p className="text-textSecondary text-sm mt-1 max-w-xl">
             Browse every expense in the system. Filter by group, month, payer,
-            category, or description. Edit history shows before → after for
-            description and amount when members update an expense.
+            category, or description. With a group selected you also see
+            lifetime spend for that group; add a month to focus totals on that
+            month. Edit history shows before → after when members update an
+            expense.
           </p>
         </div>
         <Link
@@ -197,7 +208,7 @@ export default function Expenses() {
       </div>
 
       {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6">
           <div className="bg-surface rounded-xl border border-white/5 p-4">
             <p className="text-textSecondary text-xs uppercase tracking-wide mb-1">
               Matching expenses
@@ -206,20 +217,43 @@ export default function Expenses() {
               {(summary.count ?? 0).toLocaleString()}
             </p>
             <p className="text-textSecondary text-xs mt-1">
-              With current filters
+              Rows that match every active filter
             </p>
           </div>
           <div className="bg-surface rounded-xl border border-white/5 p-4">
             <p className="text-textSecondary text-xs uppercase tracking-wide mb-1">
-              Sum of amounts (filtered)
+              {summary.hasGroupFilter && summary.selectedMonth
+                ? `Total for ${formatYearMonthLabel(summary.selectedMonth)}`
+                : summary.hasGroupFilter
+                  ? "Total (current filters)"
+                  : "Sum of amounts (filtered)"}
             </p>
             <p className="text-2xl font-bold text-primary">
               ₹{formatMoney(summary.totalAmount)}
             </p>
-            <p className="text-textSecondary text-xs mt-1">
-              Total ₹ across all matching rows
+            <p className="text-textSecondary text-xs mt-1 leading-relaxed">
+              {summary.hasGroupFilter && summary.selectedMonth
+                ? `₹ sum for this group in ${formatYearMonthLabel(summary.selectedMonth)}, plus any payer/category/search filters.`
+                : summary.hasGroupFilter
+                  ? "₹ sum for rows matching filters. Pick a month to see that month only."
+                  : "₹ sum across all rows matching your filters."}
             </p>
           </div>
+          {summary.hasGroupFilter &&
+            summary.groupAllTimeTotal != null && (
+              <div className="bg-surface rounded-xl border border-primary/20 p-4 sm:col-span-2 lg:col-span-1">
+                <p className="text-textSecondary text-xs uppercase tracking-wide mb-1">
+                  Group · all months
+                </p>
+                <p className="text-2xl font-bold text-textPrimary">
+                  ₹{formatMoney(summary.groupAllTimeTotal)}
+                </p>
+                <p className="text-textSecondary text-xs mt-1">
+                  {(summary.groupAllTimeCount ?? 0).toLocaleString()} expenses in
+                  this group (ignores month, payer, category & search filters)
+                </p>
+              </div>
+            )}
         </div>
       )}
 

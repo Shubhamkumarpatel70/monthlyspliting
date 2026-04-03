@@ -354,7 +354,12 @@ router.get("/expenses", async (req, res) => {
       search,
     });
 
-    const [expenses, total, sumAgg] = await Promise.all([
+    const groupOid =
+      groupId && mongoose.Types.ObjectId.isValid(groupId)
+        ? new mongoose.Types.ObjectId(groupId)
+        : null;
+
+    const [expenses, total, sumAgg, groupLifetimeAgg] = await Promise.all([
       Expense.find(query)
         .populate("payer", "name email mobile")
         .populate("group", "name")
@@ -369,9 +374,26 @@ router.get("/expenses", async (req, res) => {
         { $match: query },
         { $group: { _id: null, totalAmount: { $sum: "$amount" } } },
       ]),
+      groupOid
+        ? Expense.aggregate([
+            { $match: { group: groupOid } },
+            {
+              $group: {
+                _id: null,
+                totalAmount: { $sum: "$amount" },
+                count: { $sum: 1 },
+              },
+            },
+          ])
+        : Promise.resolve([]),
     ]);
 
     const totalAmount = sumAgg[0]?.totalAmount || 0;
+    const groupLife = groupLifetimeAgg[0];
+    const monthNorm =
+      month && /^\d{4}-\d{2}$/.test(String(month).trim())
+        ? String(month).trim()
+        : null;
 
     res.json({
       expenses,
@@ -379,6 +401,10 @@ router.get("/expenses", async (req, res) => {
         count: total,
         totalAmount,
         filtersMatchCount: total,
+        groupAllTimeTotal: groupOid ? groupLife?.totalAmount ?? 0 : null,
+        groupAllTimeCount: groupOid ? groupLife?.count ?? 0 : null,
+        selectedMonth: monthNorm,
+        hasGroupFilter: Boolean(groupOid),
       },
       pagination: {
         page: pageNum,
@@ -405,15 +431,21 @@ router.get("/transactions", async (req, res) => {
       userId = "",
       month = "",
     } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const skip = (pageNum - 1) * limitNum;
 
     const query = {};
     if (status) query.status = status;
-    if (groupId) query.group = groupId;
-    if (userId) {
+    if (groupId && mongoose.Types.ObjectId.isValid(groupId)) {
+      query.group = groupId;
+    }
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
       query.$or = [{ from: userId }, { to: userId }];
     }
-    if (month) query.month = month;
+    if (month && /^\d{4}-\d{2}$/.test(String(month).trim())) {
+      query.month = String(month).trim();
+    }
 
     const [transactions, total, statusCounts] = await Promise.all([
       Payment.find(query)
@@ -423,9 +455,10 @@ router.get("/transactions", async (req, res) => {
         .populate("confirmedBy", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(limitNum),
       Payment.countDocuments(query),
       Payment.aggregate([
+        { $match: Object.keys(query).length ? query : {} },
         {
           $group: {
             _id: "$status",
@@ -453,10 +486,10 @@ router.get("/transactions", async (req, res) => {
       transactions,
       stats,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / parseInt(limit)),
+        pages: Math.ceil(total / limitNum) || 1,
       },
     });
   } catch (err) {

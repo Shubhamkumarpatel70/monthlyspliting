@@ -6,75 +6,86 @@ export default function Transactions() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    pages: 1,
+    total: 0,
+    limit: 30,
+  });
 
-  // Filters
   const [status, setStatus] = useState("");
   const [groupId, setGroupId] = useState("");
   const [userId, setUserId] = useState("");
   const [month, setMonth] = useState("");
 
-  // Filter options
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
+    const loadFilterOptions = async () => {
+      try {
+        const [groupsData, usersData] = await Promise.all([
+          adminApi.getGroupsList(),
+          adminApi.getUsersList(),
+        ]);
+        setGroups(groupsData || []);
+        setUsers(usersData || []);
+      } catch (err) {
+        console.error("Failed to load filter options:", err);
+      }
+    };
     loadFilterOptions();
   }, []);
 
   useEffect(() => {
+    const loadTransactions = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const params = { page, limit: 30 };
+        if (status) params.status = status;
+        if (groupId) params.groupId = groupId;
+        if (userId) params.userId = userId;
+        if (month) params.month = month;
+
+        const data = await adminApi.getTransactions(params);
+        setTransactions(data.transactions || []);
+        setStats(data.stats);
+        if (data.pagination) {
+          setPagination({
+            pages: data.pagination.pages || 1,
+            total: data.pagination.total ?? 0,
+            limit: data.pagination.limit ?? 30,
+          });
+        }
+      } catch (err) {
+        setError(err.message || "Failed to load transactions");
+        setTransactions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
     loadTransactions();
-  }, [status, groupId, userId, month, pagination.page]);
-
-  const loadFilterOptions = async () => {
-    try {
-      const [groupsData, usersData] = await Promise.all([
-        adminApi.getGroupsList(),
-        adminApi.getUsersList(),
-      ]);
-      setGroups(groupsData || []);
-      setUsers(usersData || []);
-    } catch (err) {
-      console.error("Failed to load filter options:", err);
-    }
-  };
-
-  const loadTransactions = async () => {
-    setLoading(true);
-    try {
-      const params = { page: pagination.page, limit: 30 };
-      if (status) params.status = status;
-      if (groupId) params.groupId = groupId;
-      if (userId) params.userId = userId;
-      if (month) params.month = month;
-
-      const data = await adminApi.getTransactions(params);
-      setTransactions(data.transactions || []);
-      setStats(data.stats);
-      setPagination((prev) => ({ ...prev, ...data.pagination }));
-    } catch (err) {
-      setError(err.message || "Failed to load transactions");
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [status, groupId, userId, month, page]);
 
   const clearFilters = () => {
     setStatus("");
     setGroupId("");
     setUserId("");
     setMonth("");
-    setPagination((prev) => ({ ...prev, page: 1 }));
+    setPage(1);
   };
 
-  const getStatusBadge = (status) => {
+  const filtersActive = Boolean(status || groupId || userId || month);
+
+  const getStatusBadge = (statusVal) => {
     const styles = {
       pending: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
       completed: "bg-green-500/20 text-green-400 border-green-500/30",
       failed: "bg-red-500/20 text-red-400 border-red-500/30",
       cancelled: "bg-gray-500/20 text-gray-400 border-gray-500/30",
     };
-    return styles[status] || "bg-gray-500/20 text-gray-400";
+    return styles[statusVal] || "bg-gray-500/20 text-gray-400";
   };
 
   const formatDate = (date) => {
@@ -94,12 +105,12 @@ export default function Transactions() {
         <h1 className="text-2xl sm:text-3xl font-bold text-textPrimary">
           Transactions
         </h1>
-        <p className="text-textSecondary text-sm mt-1">
-          View and filter all payment transactions
+        <p className="text-textSecondary text-sm mt-1 max-w-xl">
+          View and filter payment records. Status totals below match the same
+          filters as the table (group, user, month, status).
         </p>
       </div>
 
-      {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <div className="bg-surface rounded-xl border border-white/5 p-3 sm:p-4">
@@ -141,87 +152,103 @@ export default function Transactions() {
         </div>
       )}
 
-      {/* Filters */}
       <div className="bg-surface rounded-xl border border-white/5 p-4 mb-6">
-        <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="flex flex-wrap items-center gap-3 mb-4">
           <h3 className="text-textPrimary font-medium text-sm">Filters</h3>
-          {(status || groupId || userId || month) && (
+          {filtersActive && (
             <button
+              type="button"
               onClick={clearFilters}
-              className="text-primary text-xs hover:underline"
+              className="text-primary text-xs font-medium hover:underline"
             >
               Clear all
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPagination((p) => ({ ...p, page: 1 }));
-            }}
-            className="px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <option value="">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-
-          <select
-            value={groupId}
-            onChange={(e) => {
-              setGroupId(e.target.value);
-              setPagination((p) => ({ ...p, page: 1 }));
-            }}
-            className="px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <option value="">All Groups</option>
-            {groups.map((g) => (
-              <option key={g._id} value={g._id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={userId}
-            onChange={(e) => {
-              setUserId(e.target.value);
-              setPagination((p) => ({ ...p, page: 1 }));
-            }}
-            className="px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <option value="">All Users</option>
-            {users.map((u) => (
-              <option key={u._id} value={u._id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => {
-              setMonth(e.target.value);
-              setPagination((p) => ({ ...p, page: 1 }));
-            }}
-            placeholder="Select month"
-            className="px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs text-textSecondary mb-1">
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-textSecondary mb-1">
+              Group
+            </label>
+            <select
+              value={groupId}
+              onChange={(e) => {
+                setGroupId(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="">All groups</option>
+              {groups.map((g) => (
+                <option key={g._id} value={g._id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-textSecondary mb-1">
+              User (from or to)
+            </label>
+            <select
+              value={userId}
+              onChange={(e) => {
+                setUserId(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="">All users</option>
+              {users.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name}
+                  {u.email ? ` (${u.email})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-textSecondary mb-1">
+              Month (YYYY-MM)
+            </label>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => {
+                setMonth(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger mb-6">
+        <div className="p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger mb-6 text-sm">
           {error}
         </div>
       )}
 
-      {/* Transactions Table */}
       <div className="bg-surface rounded-xl border border-white/5 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -229,11 +256,12 @@ export default function Transactions() {
           </div>
         ) : transactions.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-textSecondary">No transactions found</p>
+            <p className="text-textSecondary">
+              No transactions match these filters.
+            </p>
           </div>
         ) : (
           <>
-            {/* Desktop Table */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-darkBg/50 border-b border-white/5">
@@ -246,6 +274,9 @@ export default function Transactions() {
                     </th>
                     <th className="text-left px-4 py-3 text-textSecondary text-xs font-medium">
                       Group
+                    </th>
+                    <th className="text-left px-4 py-3 text-textSecondary text-xs font-medium">
+                      Month
                     </th>
                     <th className="text-left px-4 py-3 text-textSecondary text-xs font-medium">
                       Method
@@ -283,6 +314,9 @@ export default function Transactions() {
                       <td className="px-4 py-3 text-textSecondary text-sm">
                         {t.group?.name || "-"}
                       </td>
+                      <td className="px-4 py-3 text-textSecondary text-xs whitespace-nowrap">
+                        {t.month || "—"}
+                      </td>
                       <td className="px-4 py-3 text-textSecondary text-sm capitalize">
                         {t.paymentMethod || "-"}
                       </td>
@@ -305,7 +339,6 @@ export default function Transactions() {
               </table>
             </div>
 
-            {/* Mobile Cards */}
             <div className="md:hidden divide-y divide-white/5">
               {transactions.map((t) => (
                 <div key={t._id} className="p-4">
@@ -330,6 +363,7 @@ export default function Transactions() {
                   </div>
                   <div className="text-xs text-textSecondary space-y-1">
                     <p>Group: {t.group?.name || "-"}</p>
+                    <p>Month: {t.month || "—"}</p>
                     <p>
                       Method:{" "}
                       <span className="capitalize">
@@ -351,24 +385,26 @@ export default function Transactions() {
         )}
       </div>
 
-      {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="flex items-center justify-between mt-4 px-2">
+      {pagination.total > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 px-1">
           <p className="text-textSecondary text-sm">
-            Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}
-            total)
+            Page {page} of {pagination.pages} ({pagination.total} total)
           </p>
           <div className="flex gap-2">
             <button
-              onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
-              disabled={pagination.page <= 1}
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
               className="px-3 py-1.5 rounded-lg bg-surface border border-white/10 text-textPrimary text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5"
             >
               Previous
             </button>
             <button
-              onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-              disabled={pagination.page >= pagination.pages}
+              type="button"
+              onClick={() =>
+                setPage((p) => Math.min(pagination.pages, p + 1))
+              }
+              disabled={page >= pagination.pages}
               className="px-3 py-1.5 rounded-lg bg-surface border border-white/10 text-textPrimary text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5"
             >
               Next

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { admin as adminApi } from "../../api";
+import { FaEdit, FaTrash } from "react-icons/fa";
+import { useAuth } from "../../context/AuthContext"; // Add this import
 
 const EXPENSE_CATEGORIES = [
   "Food",
@@ -120,6 +122,16 @@ export default function Expenses() {
   const filtersActive = Boolean(
     searchInput.trim() || groupId || month || payerId || category,
   );
+
+  const { user } = useAuth(); // Get current user
+
+  const handleEdit = (expense) => {
+    console.log("Edit expense:", expense);
+  };
+
+  const handleDelete = (expense) => {
+    console.log("Delete expense:", expense);
+  };
 
   return (
     <div>
@@ -327,13 +339,16 @@ export default function Expenses() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-textSecondary uppercase tracking-wide">
                       Date
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-textSecondary uppercase tracking-wide">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {expenses.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="px-4 py-12 text-center text-textSecondary text-sm"
                       >
                         No expenses found for these filters.
@@ -376,6 +391,34 @@ export default function Expenses() {
                         </td>
                         <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
                           {formatExpenseDate(expense.date)}
+                        </td>
+                        <td className="px-4 py-3 align-top flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(expense)}
+                            disabled={user?._id !== expense.payer?._id}
+                            className="p-2 rounded-lg border border-white/10 bg-surface text-primary disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/5"
+                            title={
+                              user?._id !== expense.payer?._id
+                                ? "You can only edit your own entries"
+                                : "Edit"
+                            }
+                          >
+                            <FaEdit size={18} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(expense)}
+                            disabled={user?._id !== expense.payer?._id}
+                            className="p-2 rounded-lg border border-white/10 bg-surface text-danger disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/5"
+                            title={
+                              user?._id !== expense.payer?._id
+                                ? "You can only delete your own entries"
+                                : "Delete"
+                            }
+                          >
+                            <FaTrash size={18} />
+                          </button>
                         </td>
                       </tr>
                     ))

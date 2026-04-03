@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Expense, { EXPENSE_CATEGORIES } from '../models/Expense.js';
 import Advance from '../models/Advance.js';
 import Settlement from '../models/Settlement.js';
@@ -164,6 +165,40 @@ router.post('/:groupId/expenses/check-duplicate', groupMember, async (req, res) 
     });
   } catch (err) {
     res.status(500).json({ message: err.message || 'Duplicate check failed' });
+  }
+});
+
+/** Sum expenses per month for one calendar year (YYYY-MM totals). */
+router.get('/:groupId/expenses/year-totals', groupMember, async (req, res) => {
+  try {
+    const year = parseInt(req.query.year, 10);
+    if (!Number.isFinite(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ message: 'Valid year required (YYYY)' });
+    }
+    const y = String(year);
+    const groupOid = new mongoose.Types.ObjectId(req.params.groupId);
+    const results = await Expense.aggregate([
+      {
+        $match: {
+          group: groupOid,
+          month: { $gte: `${y}-01`, $lte: `${y}-12` },
+        },
+      },
+      { $group: { _id: '$month', totalAmount: { $sum: '$amount' } } },
+    ]);
+    const totalsByMonth = {};
+    for (let m = 1; m <= 12; m++) {
+      const key = `${y}-${String(m).padStart(2, '0')}`;
+      totalsByMonth[key] = 0;
+    }
+    for (const row of results) {
+      if (row._id && Object.prototype.hasOwnProperty.call(totalsByMonth, row._id)) {
+        totalsByMonth[row._id] = Math.round(Number(row.totalAmount) * 100) / 100;
+      }
+    }
+    res.json({ year, totalsByMonth });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to compute year totals' });
   }
 });
 

@@ -7,10 +7,12 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  LineChart,
+  Line,
+  CartesianGrid,
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
 } from "recharts";
 
 const CHART_COLORS = [
@@ -49,6 +51,7 @@ export default function Charts({
   balances,
   selectedMonth,
   previousMonthBalances,
+  yearTotalsByMonth,
 }) {
   const expenseList = Array.isArray(expenses) ? expenses : [];
 
@@ -87,29 +90,64 @@ export default function Charts({
   }, [balances, group]);
 
   const monthCompareData = useMemo(() => {
-    if (!selectedMonth) return [];
-    const currentTotal = balances?.totalExpense ?? 0;
-    const prevMonth = getPreviousMonth(selectedMonth);
-    const prevTotal = previousMonthBalances?.totalExpense ?? 0;
-    const prevLabel = prevMonth
-      ? formatMonthLabel(prevMonth)
-      : "Previous month";
-    const currLabel = formatMonthLabel(selectedMonth);
+    if (!selectedMonth || yearTotalsByMonth == null) return null;
+    const m = /^(\d{4})-(\d{2})$/.exec(selectedMonth);
+    if (!m) return null;
+    const year = parseInt(m[1], 10);
+    const monthNum = parseInt(m[2], 10);
+    if (monthNum < 1 || monthNum > 12) return null;
+
+    const prevMonthKey = getPreviousMonth(selectedMonth);
+    const prevTotal =
+      prevMonthKey && prevMonthKey.startsWith(`${year}-`)
+        ? yearTotalsByMonth[prevMonthKey] ?? 0
+        : previousMonthBalances?.totalExpense ?? 0;
+
+    const currentTotal =
+      yearTotalsByMonth[selectedMonth] ?? balances?.totalExpense ?? 0;
+
     const difference = currentTotal - prevTotal;
     const percentChange =
-      prevTotal > 0 ? ((difference / prevTotal) * 100).toFixed(1) : 0;
+      prevTotal > 0
+        ? Number(((difference / prevTotal) * 100).toFixed(1))
+        : 0;
+
+    const data = [];
+    for (let im = 1; im <= monthNum; im++) {
+      const monthKey = `${year}-${String(im).padStart(2, "0")}`;
+      const total = yearTotalsByMonth[monthKey] ?? 0;
+      const label = format(new Date(year, im - 1, 1), "MMM");
+      const prevKey =
+        im > 1 ? `${year}-${String(im - 1).padStart(2, "0")}` : null;
+      const prevT = prevKey != null ? yearTotalsByMonth[prevKey] ?? 0 : null;
+      let pctVsPrev = null;
+      if (im > 1 && prevT != null && prevT > 0) {
+        pctVsPrev = Number((((total - prevT) / prevT) * 100).toFixed(1));
+      }
+      data.push({
+        month: label,
+        monthKey,
+        total: Number(total),
+        role: monthKey === selectedMonth ? "current" : "year",
+        isSelectedMonth: monthKey === selectedMonth,
+        isFirstInSeries: im === 1,
+        pctVsPrev,
+      });
+    }
+
     return {
-      data: [
-        { month: prevLabel, total: Number(prevTotal), fill: "#64748B" },
-        { month: currLabel, total: Number(currentTotal), fill: "#22D3EE" },
-      ],
+      data,
       difference,
       percentChange: Number(percentChange),
       prevTotal,
       currentTotal,
+      prevLabel: prevMonthKey ? formatMonthLabel(prevMonthKey) : "Previous month",
+      currLabel: formatMonthLabel(selectedMonth),
+      year,
     };
   }, [
     selectedMonth,
+    yearTotalsByMonth,
     balances?.totalExpense,
     previousMonthBalances?.totalExpense,
   ]);
@@ -255,10 +293,19 @@ export default function Charts({
         </div>
       )}
 
-      {monthCompareData.data?.length > 0 && (
+      {monthCompareData &&
+        monthCompareData.data?.length > 0 && (
         <div className="bg-surface rounded-2xl border border-white/5 p-4 sm:p-5 col-span-1 sm:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h3 className="text-textPrimary font-semibold">Month comparison</h3>
+            <div>
+              <h3 className="text-textPrimary font-semibold">
+                Month comparison — {monthCompareData.year}
+              </h3>
+              <p className="text-textSecondary text-xs mt-1">
+                January through {monthCompareData.currLabel} only; later months
+                in {monthCompareData.year} are hidden until you select them.
+              </p>
+            </div>
             {monthCompareData.prevTotal > 0 && (
               <div
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${monthCompareData.difference > 0 ? "bg-danger/10 text-danger" : monthCompareData.difference < 0 ? "bg-success/10 text-success" : "bg-white/5 text-textSecondary"}`}
@@ -308,7 +355,7 @@ export default function Charts({
           <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
             <div className="bg-darkBg/50 rounded-xl p-3 sm:p-4 border border-white/5">
               <p className="text-textSecondary text-xs mb-1">
-                {monthCompareData.data[0]?.month}
+                {monthCompareData.prevLabel}
               </p>
               <p className="text-base sm:text-xl font-bold text-textSecondary">
                 ₹{monthCompareData.prevTotal.toFixed(0)}
@@ -316,7 +363,7 @@ export default function Charts({
             </div>
             <div className="bg-primary/10 rounded-xl p-3 sm:p-4 border border-primary/30">
               <p className="text-primary text-xs mb-1">
-                {monthCompareData.data[1]?.month}
+                {monthCompareData.currLabel}
               </p>
               <p className="text-base sm:text-xl font-bold text-primary">
                 ₹{monthCompareData.currentTotal.toFixed(0)}
@@ -324,37 +371,148 @@ export default function Charts({
             </div>
           </div>
 
-          <div className="h-36 sm:h-48 hidden sm:block">
+          <div className="h-52 sm:h-64 hidden sm:block">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
+              <LineChart
                 data={monthCompareData.data}
-                margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+                margin={{ top: 44, right: 12, left: 8, bottom: 12 }}
               >
+                <CartesianGrid
+                  stroke="rgba(148, 163, 184, 0.15)"
+                  strokeDasharray="4 4"
+                  vertical={false}
+                />
                 <XAxis
                   dataKey="month"
-                  tick={{ fill: "#94A3B8", fontSize: 12 }}
+                  tick={{ fill: "#94A3B8", fontSize: 11 }}
+                  tickLine={{ stroke: "#475569" }}
+                  axisLine={{ stroke: "#475569" }}
+                  angle={-25}
+                  textAnchor="end"
+                  height={52}
+                  interval={0}
                 />
                 <YAxis
-                  tick={{ fill: "#94A3B8", fontSize: 12 }}
+                  tick={{ fill: "#94A3B8", fontSize: 11 }}
                   tickFormatter={(v) => `₹${v}`}
+                  width={52}
+                  tickLine={{ stroke: "#475569" }}
+                  axisLine={{ stroke: "#475569" }}
                 />
                 <Tooltip
-                  formatter={(v) => [
-                    `₹${Number(v).toFixed(2)}`,
-                    "Total expense",
-                  ]}
-                  contentStyle={{
-                    backgroundColor: "#1E293B",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const p = payload[0].payload;
+                    return (
+                      <div
+                        className="rounded-lg border border-white/10 px-3 py-2 text-xs shadow-lg"
+                        style={{
+                          backgroundColor: "#1E293B",
+                        }}
+                      >
+                        <p className="font-medium text-textPrimary mb-1">
+                          {formatMonthLabel(p.monthKey)}
+                        </p>
+                        {p.isSelectedMonth && (
+                          <p className="text-primary/90 text-[10px] uppercase tracking-wide mb-1">
+                            Selected month
+                          </p>
+                        )}
+                        <p className="text-primary font-semibold">
+                          ₹{Number(p.total).toFixed(2)}
+                        </p>
+                        {p.pctVsPrev != null && (
+                          <p className="text-textSecondary mt-1">
+                            vs previous month:{" "}
+                            <span
+                              className={
+                                p.pctVsPrev > 0
+                                  ? "text-danger"
+                                  : p.pctVsPrev < 0
+                                    ? "text-success"
+                                    : "text-textSecondary"
+                              }
+                            >
+                              {p.pctVsPrev > 0 ? "+" : ""}
+                              {p.pctVsPrev}%
+                            </span>
+                          </p>
+                        )}
+                        {!p.isFirstInSeries &&
+                          p.isSelectedMonth &&
+                          p.pctVsPrev == null &&
+                          p.total > 0 && (
+                            <p className="text-textSecondary mt-1">
+                              No spend in the prior month — % vs prior not
+                              shown.
+                            </p>
+                          )}
+                      </div>
+                    );
                   }}
                 />
-                <Bar dataKey="total" radius={[4, 4, 0, 0]} name="Total expense">
-                  {monthCompareData.data.map((entry, i) => (
-                    <Cell key={i} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  name="Total expense"
+                  stroke="#22D3EE"
+                  strokeWidth={2.5}
+                  dot={(dotProps) => {
+                    const { cx, cy, payload } = dotProps;
+                    if (cx == null || cy == null || !payload) return null;
+                    const active = payload.isSelectedMonth;
+                    const r = active ? 6 : 4;
+                    const stroke = active ? "#38bdf8" : "#22D3EE";
+                    const strokeW = active ? 2.5 : 2;
+                    const labelSize = monthCompareData.data.length > 6 ? 9 : 11;
+                    const pctSize = monthCompareData.data.length > 6 ? 8 : 10;
+                    return (
+                      <g>
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={r}
+                          fill="#0f172a"
+                          stroke={stroke}
+                          strokeWidth={strokeW}
+                        />
+                        <text
+                          x={cx}
+                          y={cy - 12}
+                          textAnchor="middle"
+                          fill="#e2e8f0"
+                          fontSize={labelSize}
+                          fontWeight={600}
+                        >
+                          ₹{Number(payload.total).toLocaleString("en-IN", {
+                            maximumFractionDigits: 0,
+                          })}
+                        </text>
+                        {payload.pctVsPrev != null && (
+                          <text
+                            x={cx}
+                            y={cy - 26}
+                            textAnchor="middle"
+                            fill={
+                              payload.pctVsPrev > 0
+                                ? "#f87171"
+                                : payload.pctVsPrev < 0
+                                  ? "#4ade80"
+                                  : "#94a3b8"
+                            }
+                            fontSize={pctSize}
+                            fontWeight={500}
+                          >
+                            {payload.pctVsPrev > 0 ? "+" : ""}
+                            {payload.pctVsPrev}% vs prev
+                          </text>
+                        )}
+                      </g>
+                    );
+                  }}
+                  activeDot={{ r: 8, stroke: "#38bdf8", fill: "#0f172a" }}
+                />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>

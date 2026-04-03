@@ -128,6 +128,8 @@ export default function GroupDetail() {
   const [aiForecast, setAiForecast] = useState(null);
   const [aiForecastLoading, setAiForecastLoading] = useState(false);
   const [aiForecastError, setAiForecastError] = useState("");
+  /** Per-month totals for the selected month’s year (for charts). */
+  const [yearTotalsByMonth, setYearTotalsByMonth] = useState(null);
   const {
     onCooldown: aiSummaryOnCooldown,
     remainingSec: aiSummaryCooldownSec,
@@ -306,6 +308,26 @@ export default function GroupDetail() {
   useEffect(() => {
     loadGroup();
   }, [groupId]);
+
+  useEffect(() => {
+    if (!groupId || !selectedMonth || !/^\d{4}-\d{2}$/.test(selectedMonth)) {
+      setYearTotalsByMonth(null);
+      return;
+    }
+    const y = parseInt(selectedMonth.slice(0, 4), 10);
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await expensesApi.yearTotals(groupId, y);
+        if (!cancelled) setYearTotalsByMonth(data.totalsByMonth || {});
+      } catch {
+        if (!cancelled) setYearTotalsByMonth({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, selectedMonth]);
 
   useEffect(() => {
     if (!group) return;
@@ -1392,13 +1414,14 @@ export default function GroupDetail() {
             </div>
           )}
 
-          {Array.isArray(expenses) && expenses.length > 0 && (
+          {selectedMonth && (
             <Charts
               expenses={expenses}
               group={group}
               balances={balances}
               selectedMonth={selectedMonth}
               previousMonthBalances={previousMonthBalances}
+              yearTotalsByMonth={yearTotalsByMonth}
             />
           )}
 

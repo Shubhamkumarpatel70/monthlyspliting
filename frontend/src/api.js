@@ -105,6 +105,10 @@ export const expenses = {
       `/groups/${groupId}/expenses${month ? `?month=${encodeURIComponent(month)}` : ""}`,
     ),
   months: (groupId) => request(`/groups/${groupId}/months`),
+  yearTotals: (groupId, year) =>
+    request(
+      `/groups/${groupId}/expenses/year-totals?year=${encodeURIComponent(year)}`,
+    ),
   create: (groupId, data) =>
     request(`/groups/${groupId}`, {
       method: "POST",

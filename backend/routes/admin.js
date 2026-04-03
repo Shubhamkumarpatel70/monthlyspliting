@@ -15,14 +15,16 @@ function expenseAdminFilter({
   search = "",
 }) {
   const query = {};
+  // Use real ObjectIds so the same object works for find/count AND aggregate $match
+  // (aggregate does not apply Mongoose query casting; string IDs would sum to 0).
   if (groupId && mongoose.Types.ObjectId.isValid(groupId)) {
-    query.group = groupId;
+    query.group = new mongoose.Types.ObjectId(groupId);
   }
   if (month && /^\d{4}-\d{2}$/.test(String(month).trim())) {
     query.month = String(month).trim();
   }
   if (payerId && mongoose.Types.ObjectId.isValid(payerId)) {
-    query.payer = payerId;
+    query.payer = new mongoose.Types.ObjectId(payerId);
   }
   if (category && String(category).trim()) {
     query.category = String(category).trim();

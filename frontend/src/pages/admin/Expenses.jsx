@@ -635,7 +635,8 @@ export default function Expenses() {
               </button>
             </div>
             <div className="overflow-y-auto p-5 space-y-4">
-              {!historyExpense.editHistory?.length ? (
+              {!Array.isArray(historyExpense.editHistory) ||
+              historyExpense.editHistory.length === 0 ? (
                 <p className="text-textSecondary text-sm">
                   No edits have been recorded for this expense yet. Changes
                   made after this update ships will appear here.

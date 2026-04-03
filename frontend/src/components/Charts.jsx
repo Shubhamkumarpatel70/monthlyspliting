@@ -50,9 +50,11 @@ export default function Charts({
   selectedMonth,
   previousMonthBalances,
 }) {
+  const expenseList = Array.isArray(expenses) ? expenses : [];
+
   const categoryData = useMemo(() => {
     const byCat = {};
-    expenses.forEach((e) => {
+    expenseList.forEach((e) => {
       const label =
         e.category === "Custom" && e.customCategory
           ? e.customCategory
@@ -62,10 +64,10 @@ export default function Charts({
     return Object.entries(byCat)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [expenses]);
+  }, [expenseList]);
 
   const memberData = useMemo(() => {
-    if (!balances?.paidByUser || !group?.members) return [];
+    if (!balances?.paidByUser || !Array.isArray(group?.members)) return [];
     const totalExpense = balances?.totalExpense || 0;
     return group.members
       .map((m, index) => {

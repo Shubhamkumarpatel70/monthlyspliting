@@ -50,7 +50,12 @@ export default function AdminDashboard() {
   const verifiedUsers = stats?.users?.verified ?? 0;
   const unverifiedUsers = Math.max(0, totalUsers - verifiedUsers);
   const expenseTotalAmount = stats?.expenses?.totalAmount ?? 0;
-  const recentExpenses = stats?.expenses?.recent ?? [];
+  const recentExpenses = Array.isArray(stats?.expenses?.recent)
+    ? stats.expenses.recent
+    : [];
+  const recentUsers = Array.isArray(stats?.users?.recent)
+    ? stats.users.recent
+    : [];
 
   const statCards = [
     {
@@ -212,7 +217,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {stats?.users?.recent && stats.users.recent.length > 0 && (
+        {recentUsers.length > 0 && (
           <div className="bg-surface rounded-2xl border border-white/5 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-textPrimary">
@@ -226,7 +231,7 @@ export default function AdminDashboard() {
               </Link>
             </div>
             <div className="space-y-3">
-              {stats.users.recent.map((user) => (
+              {recentUsers.map((user) => (
                 <div
                   key={user._id}
                   className="flex items-center justify-between p-3 rounded-lg bg-darkBg border border-white/5"

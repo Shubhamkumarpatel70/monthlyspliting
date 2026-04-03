@@ -13,8 +13,9 @@ export default function SettlementView({
   onConfirmPayment,
   onRejectPayment,
 }) {
-  const transactions =
+  const rawTx =
     settlement?.transactionsWithNames ?? settlement?.transactions ?? [];
+  const transactions = Array.isArray(rawTx) ? rawTx : [];
   const status = settlement?.status ?? "pending";
   const [paymentModal, setPaymentModal] = useState({
     open: false,

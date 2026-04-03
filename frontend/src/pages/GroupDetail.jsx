@@ -49,13 +49,15 @@ function expenseAddedById(ex) {
   return typeof a === "object" && a._id != null ? String(a._id) : String(a);
 }
 
-function ledgerPayerId(ex) {
+/** Payer user id string for an expense (name must not shadow filter state `ledgerPayerId`). */
+function resolveExpensePayerId(ex) {
   const p = ex?.payer;
   if (p == null) return "";
   return typeof p === "object" && p._id != null ? String(p._id) : String(p);
 }
 
-function ledgerCategoryLabel(ex) {
+/** Category label for ledger (avoid name collision with `ledgerCategory` state in minified bundles). */
+function resolveExpenseCategoryForLedger(ex) {
   if (ex?.category === "Custom" && ex?.customCategory) return ex.customCategory;
   return ex?.category || "Misc";
 }
@@ -150,7 +152,7 @@ export default function GroupDetail() {
 
   const ledgerCategoryOptions = useMemo(() => {
     const set = new Set();
-    (expenses || []).forEach((e) => {
+    (Array.isArray(expenses) ? expenses : []).forEach((e) => {
       const label =
         e.category === "Custom" && e.customCategory
           ? e.customCategory
@@ -683,7 +685,8 @@ export default function GroupDetail() {
   };
 
   const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-  const monthOptions = [...new Set([...months, currentMonthStr])]
+  const monthList = Array.isArray(months) ? months : [];
+  const monthOptions = [...new Set([...monthList, currentMonthStr])]
     .sort()
     .reverse();
 
@@ -1247,7 +1250,7 @@ export default function GroupDetail() {
                         const name = memberMap.get(id.toString()) || "Member";
                         const paid = safeNumber(obj.paid);
                         const originalNet = safeNumber(obj.originalNet);
-                        const rowShare = safeNumber(finalShare);
+                        const rowShare = safeNumber(obj.share, finalShare);
                         const rowAdvanceShare = safeNumber(
                           obj.advanceShare,
                           advanceShare,
@@ -1717,10 +1720,10 @@ export default function GroupDetail() {
                           </span>
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 shrink-0 ${getCategoryPillClass(
-                              ledgerCategoryLabel(ex),
+                              resolveExpenseCategoryForLedger(ex),
                             )}`}
                           >
-                            {ledgerCategoryLabel(ex)}
+                            {resolveExpenseCategoryForLedger(ex)}
                           </span>
                           {ex.aiGenerated && (
                             <span
@@ -1740,7 +1743,7 @@ export default function GroupDetail() {
                             {format(new Date(ex.date), "dd MMM yyyy")}
                           </span>
                           {ex.addedBy?.name &&
-                            ledgerPayerId(ex) !== expenseAddedById(ex) && (
+                            resolveExpensePayerId(ex) !== expenseAddedById(ex) && (
                               <span className="basis-full sm:basis-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-textSecondary min-w-0 sm:mt-0">
                                 <span className="text-textSecondary/50">·</span>
                                 <span className="whitespace-nowrap shrink-0 text-textSecondary/90">

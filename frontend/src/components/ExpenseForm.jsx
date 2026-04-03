@@ -19,6 +19,7 @@ function matchMemberIdByName(group, name) {
 }
 
 export default function ExpenseForm({ group, expense, defaultMonth, categories, onSave, onCancel }) {
+  const categoryOptions = Array.isArray(categories) ? categories : [];
   const isEdit = !!expense;
   const [description, setDescription] = useState(expense?.description ?? '');
   const [amount, setAmount] = useState(expense?.amount ?? '');
@@ -34,7 +35,7 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
   const [duplicateMatches, setDuplicateMatches] = useState(null);
   const [categoryTouched, setCategoryTouched] = useState(!!expense);
   const [nlSource, setNlSource] = useState('');
-  const memberOptions = group?.members ?? [];
+  const memberOptions = Array.isArray(group?.members) ? group.members : [];
   const allMemberIds = memberOptions
     .map((m) => String(m.user?._id || m.user))
     .filter(Boolean);
@@ -306,7 +307,7 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
 
             {(splitType === 'exact' || splitType === 'percentage') && (
               <div className="mt-3 space-y-2">
-                {participants.map((id) => {
+                {(Array.isArray(participants) ? participants : []).map((id) => {
                   const member = memberOptions.find((m) => String(m.user?._id || m.user) === id);
                   const name = member?.user?.name || 'Member';
                   const val = splitValues?.[id] ?? '';
@@ -345,7 +346,7 @@ export default function ExpenseForm({ group, expense, defaultMonth, categories, 
               }}
               className="w-full px-4 py-2.5 rounded-lg bg-darkBg border border-white/10 text-textPrimary focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              {categories.map((c) => (
+              {categoryOptions.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

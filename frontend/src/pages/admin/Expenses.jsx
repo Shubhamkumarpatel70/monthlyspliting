@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { admin as adminApi } from "../../api";
-import { FaEdit, FaTrash } from "react-icons/fa";
-import { useAuth } from "../../context/AuthContext"; // Add this import
+import { useAuth } from "../../context/AuthContext";
 
 const EXPENSE_CATEGORIES = [
   "Food",
@@ -36,7 +35,31 @@ const formatExpenseDate = (d) => {
   });
 };
 
+const formatDateTime = (d) => {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+/** Latest edit that touched a field (walk from end of history). */
+function lastChangeForField(editHistory, field) {
+  if (!Array.isArray(editHistory) || editHistory.length === 0) return null;
+  for (let i = editHistory.length - 1; i >= 0; i--) {
+    const ch = editHistory[i]?.changes?.[field];
+    if (ch && typeof ch === "object" && ("from" in ch || "to" in ch)) return ch;
+  }
+  return null;
+}
+
 export default function Expenses() {
+  const { user } = useAuth();
+  const isAdminUser = user?.role === "admin";
+
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -55,6 +78,8 @@ export default function Expenses() {
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
 
+  const [historyExpense, setHistoryExpense] = useState(null);
+
   useEffect(() => {
     const t = setTimeout(() => {
       setSearch((prev) => {
@@ -68,6 +93,7 @@ export default function Expenses() {
 
   useEffect(() => {
     const loadOptions = async () => {
+      if (!isAdminUser) return;
       try {
         const [groupsData, usersData] = await Promise.all([
           adminApi.getGroupsList(),
@@ -80,10 +106,16 @@ export default function Expenses() {
       }
     };
     loadOptions();
-  }, []);
+  }, [isAdminUser]);
 
   useEffect(() => {
     const run = async () => {
+      if (!isAdminUser) {
+        setLoading(false);
+        setExpenses([]);
+        setSummary(null);
+        return;
+      }
       setLoading(true);
       setError("");
       try {
@@ -107,7 +139,7 @@ export default function Expenses() {
       }
     };
     run();
-  }, [page, limit, search, groupId, month, payerId, category]);
+  }, [page, limit, search, groupId, month, payerId, category, isAdminUser]);
 
   const clearFilters = () => {
     setSearchInput("");
@@ -123,31 +155,25 @@ export default function Expenses() {
     searchInput.trim() || groupId || month || payerId || category,
   );
 
-  const { user } = useAuth(); // Get current user
+  const uiDisabled = !isAdminUser;
 
-  const handleEdit = (expense) => {
-    console.log("Edit expense:", expense);
-    console.log(
-      "Current user ID:",
-      user?._id,
-      "Expense payer ID:",
-      expense.payer?._id,
-      "Match:",
-      user?._id === expense.payer?._id,
+  if (!isAdminUser) {
+    return (
+      <div className="p-6 rounded-2xl bg-surface border border-white/10 max-w-lg">
+        <h1 className="text-xl font-bold text-textPrimary">Expense management</h1>
+        <p className="text-textSecondary text-sm mt-2">
+          This area is only available to administrators. Use the main app as a
+          group member to add or edit your own expenses.
+        </p>
+        <Link
+          to="/dashboard"
+          className="inline-block mt-4 text-sm text-primary font-medium hover:underline"
+        >
+          Back to dashboard
+        </Link>
+      </div>
     );
-  };
-
-  const handleDelete = (expense) => {
-    console.log("Delete expense:", expense);
-    console.log(
-      "Current user ID:",
-      user?._id,
-      "Expense payer ID:",
-      expense.payer?._id,
-      "Match:",
-      user?._id === expense.payer?._id,
-    );
-  };
+  }
 
   return (
     <div>
@@ -158,7 +184,8 @@ export default function Expenses() {
           </h1>
           <p className="text-textSecondary text-sm mt-1 max-w-xl">
             Browse every expense in the system. Filter by group, month, payer,
-            category, or description.
+            category, or description. Edit history shows before → after for
+            description and amount when members update an expense.
           </p>
         </div>
         <Link
@@ -207,7 +234,8 @@ export default function Expenses() {
               placeholder="e.g. groceries, rent…"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm placeholder:text-textSecondary/70 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              disabled={uiDisabled}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm placeholder:text-textSecondary/70 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -220,7 +248,8 @@ export default function Expenses() {
                 setGroupId(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              disabled={uiDisabled}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">All groups</option>
               {groups.map((g) => (
@@ -241,7 +270,8 @@ export default function Expenses() {
                 setMonth(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              disabled={uiDisabled}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -254,7 +284,8 @@ export default function Expenses() {
                 setPayerId(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              disabled={uiDisabled}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">All users</option>
               {users.map((u) => (
@@ -275,7 +306,8 @@ export default function Expenses() {
                 setCategory(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              disabled={uiDisabled}
+              className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">All categories</option>
               {EXPENSE_CATEGORIES.map((c) => (
@@ -296,7 +328,8 @@ export default function Expenses() {
                   setLimit(Number(e.target.value));
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                disabled={uiDisabled}
+                className="w-full px-3 py-2 rounded-lg bg-darkBg border border-white/10 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -310,7 +343,8 @@ export default function Expenses() {
           <button
             type="button"
             onClick={clearFilters}
-            className="text-sm font-medium text-primary hover:underline"
+            disabled={uiDisabled}
+            className="text-sm font-medium text-primary hover:underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
           >
             Clear all filters
           </button>
@@ -331,7 +365,7 @@ export default function Expenses() {
         <>
           <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px]">
+              <table className="w-full min-w-[980px]">
                 <thead className="bg-darkBg border-b border-white/5">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-textSecondary uppercase tracking-wide">
@@ -371,73 +405,119 @@ export default function Expenses() {
                       </td>
                     </tr>
                   ) : (
-                    expenses.map((expense) => (
-                      <tr key={expense._id} className="hover:bg-white/5">
-                        <td className="px-4 py-3 align-top">
-                          <p className="text-textPrimary font-medium text-sm max-w-[220px]">
-                            {expense.description}
-                          </p>
-                          {expense.aiGenerated && (
-                            <span className="inline-block mt-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90">
-                              AI
+                    expenses.map((expense) => {
+                      const lastDesc = lastChangeForField(
+                        expense.editHistory,
+                        "description",
+                      );
+                      const lastAmt = lastChangeForField(
+                        expense.editHistory,
+                        "amount",
+                      );
+                      const hasHistory =
+                        Array.isArray(expense.editHistory) &&
+                        expense.editHistory.length > 0;
+
+                      return (
+                        <tr key={expense._id} className="hover:bg-white/5">
+                          <td className="px-4 py-3 align-top max-w-[240px]">
+                            <p className="text-textPrimary font-medium text-sm break-words">
+                              {expense.description}
+                            </p>
+                            {lastDesc && (
+                              <p className="text-[11px] sm:text-xs text-amber-400/90 mt-1.5 leading-snug space-y-0.5">
+                                <span className="text-textSecondary block">
+                                  Last text change:
+                                </span>
+                                <span className="line-through opacity-75 break-words">
+                                  {String(lastDesc.from ?? "—")}
+                                </span>
+                                <span className="text-textSecondary"> → </span>
+                                <span className="break-words">
+                                  {String(lastDesc.to ?? "—")}
+                                </span>
+                              </p>
+                            )}
+                            {expense.aiGenerated && (
+                              <span className="inline-block mt-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90">
+                                AI
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 align-top whitespace-nowrap">
+                            <span className="text-textPrimary font-semibold">
+                              ₹{formatMoney(expense.amount)}
                             </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 align-top whitespace-nowrap">
-                          <span className="text-textPrimary font-semibold">
-                            ₹{formatMoney(expense.amount)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 align-top text-sm text-textPrimary">
-                          {categoryLabel(expense)}
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <p className="text-textPrimary text-sm">
-                            {expense.payer?.name || "—"}
-                          </p>
-                          <p className="text-textSecondary text-xs truncate max-w-[140px]">
-                            {expense.payer?.email}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3 align-top text-sm text-textPrimary">
-                          {expense.group?.name || "—"}
-                        </td>
-                        <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
-                          {expense.month || "—"}
-                        </td>
-                        <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
-                          {formatExpenseDate(expense.date)}
-                        </td>
-                        <td className="px-4 py-3 align-top flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(expense)}
-                            disabled={user?._id !== expense.payer?._id}
-                            className="p-2 rounded-lg border border-white/10 bg-surface text-primary disabled:text-gray-400 disabled:bg-gray-900/50 disabled:cursor-not-allowed hover:bg-white/5 disabled:hover:bg-gray-900/20"
-                            title={
-                              user?._id !== expense.payer?._id
-                                ? "You can only edit your own entries"
-                                : "Edit"
-                            }
-                          >
-                            <FaEdit size={18} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(expense)}
-                            disabled={user?._id !== expense.payer?._id}
-                            className="p-2 rounded-lg border border-white/10 bg-surface text-danger disabled:text-gray-500 disabled:bg-gray-900/50 disabled:cursor-not-allowed hover:bg-white/5 disabled:hover:bg-gray-900/20"
-                            title={
-                              user?._id !== expense.payer?._id
-                                ? "You can only delete your own entries"
-                                : "Delete"
-                            }
-                          >
-                            <FaTrash size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                            {lastAmt && (
+                              <p className="text-[11px] sm:text-xs text-amber-400/90 mt-1.5 whitespace-normal">
+                                <span className="text-textSecondary">
+                                  Last amount change:
+                                </span>
+                                <br />
+                                ₹{formatMoney(lastAmt.from)} → ₹
+                                {formatMoney(lastAmt.to)}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 align-top text-sm text-textPrimary">
+                            {categoryLabel(expense)}
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <p className="text-textPrimary text-sm">
+                              {expense.payer?.name || "—"}
+                            </p>
+                            <p className="text-textSecondary text-xs truncate max-w-[140px]">
+                              {expense.payer?.email}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3 align-top text-sm text-textPrimary">
+                            {expense.group?.name || "—"}
+                          </td>
+                          <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
+                            {expense.month || "—"}
+                          </td>
+                          <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
+                            {formatExpenseDate(expense.date)}
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <div className="flex flex-col gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setHistoryExpense(expense)}
+                                disabled={uiDisabled}
+                                title={
+                                  hasHistory
+                                    ? "View full edit history"
+                                    : "No edits recorded yet"
+                                }
+                                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg border border-white/15 bg-darkBg/60 text-textPrimary text-xs font-medium hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                <svg
+                                  className="w-3.5 h-3.5 shrink-0 text-primary"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  aria-hidden
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                                History
+                              </button>
+                              {!hasHistory && (
+                                <span className="text-[10px] text-textSecondary">
+                                  No edits
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -454,7 +534,7 @@ export default function Expenses() {
                 <button
                   type="button"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
+                  disabled={page <= 1 || uiDisabled}
                   className="px-4 py-2 rounded-lg bg-surface border border-white/10 text-textPrimary text-sm disabled:opacity-45 disabled:cursor-not-allowed hover:bg-white/5"
                 >
                   Previous
@@ -464,7 +544,7 @@ export default function Expenses() {
                   onClick={() =>
                     setPage((p) => Math.min(pagination.pages, p + 1))
                   }
-                  disabled={page >= pagination.pages}
+                  disabled={page >= pagination.pages || uiDisabled}
                   className="px-4 py-2 rounded-lg bg-surface border border-white/10 text-textPrimary text-sm disabled:opacity-45 disabled:cursor-not-allowed hover:bg-white/5"
                 >
                   Next
@@ -473,6 +553,120 @@ export default function Expenses() {
             </div>
           )}
         </>
+      )}
+
+      {historyExpense && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/65"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="expense-history-title"
+          onClick={() => setHistoryExpense(null)}
+        >
+          <div
+            className="bg-surface border border-white/10 rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-white/10 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2
+                  id="expense-history-title"
+                  className="text-lg font-semibold text-textPrimary"
+                >
+                  Edit history
+                </h2>
+                <p className="text-xs text-textSecondary mt-1 truncate">
+                  {historyExpense.description}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryExpense(null)}
+                className="shrink-0 p-2 rounded-lg text-textSecondary hover:bg-white/10"
+                aria-label="Close"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-4">
+              {!historyExpense.editHistory?.length ? (
+                <p className="text-textSecondary text-sm">
+                  No edits have been recorded for this expense yet. Changes
+                  made after this update ships will appear here.
+                </p>
+              ) : (
+                [...historyExpense.editHistory]
+                  .slice()
+                  .reverse()
+                  .map((entry, idx) => (
+                    <div
+                      key={entry._id || idx}
+                      className="rounded-xl border border-white/10 bg-darkBg/50 p-3 text-sm"
+                    >
+                      <p className="text-textSecondary text-xs mb-2">
+                        {formatDateTime(entry.at)} ·{" "}
+                        <span className="text-textPrimary font-medium">
+                          {entry.editedBy?.name || "Unknown user"}
+                        </span>
+                        {entry.editedBy?.email ? (
+                          <span className="text-textSecondary">
+                            {" "}
+                            ({entry.editedBy.email})
+                          </span>
+                        ) : null}
+                      </p>
+                      {entry.changes?.description && (
+                        <div className="mb-2">
+                          <p className="text-xs font-medium text-textSecondary uppercase tracking-wide mb-1">
+                            Description
+                          </p>
+                          <p className="text-textPrimary break-words">
+                            <span className="line-through opacity-70">
+                              {String(entry.changes.description.from ?? "—")}
+                            </span>
+                            <span className="text-textSecondary mx-1">→</span>
+                            <span>
+                              {String(entry.changes.description.to ?? "—")}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      {entry.changes?.amount && (
+                        <div>
+                          <p className="text-xs font-medium text-textSecondary uppercase tracking-wide mb-1">
+                            Amount
+                          </p>
+                          <p className="text-textPrimary">
+                            ₹{formatMoney(entry.changes.amount.from)} → ₹
+                            {formatMoney(entry.changes.amount.to)}
+                          </p>
+                        </div>
+                      )}
+                      {entry.changes &&
+                        !entry.changes.description &&
+                        !entry.changes.amount && (
+                          <p className="text-textSecondary text-xs">
+                            (Other fields updated)
+                          </p>
+                        )}
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

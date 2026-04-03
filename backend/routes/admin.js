@@ -359,6 +359,7 @@ router.get("/expenses", async (req, res) => {
         .populate("payer", "name email mobile")
         .populate("group", "name")
         .populate("addedBy", "name email")
+        .populate("editHistory.editedBy", "name email")
         .sort({ date: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNum)

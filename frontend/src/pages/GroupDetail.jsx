@@ -1526,9 +1526,9 @@ export default function GroupDetail() {
           )}
 
           <div className="bg-surface rounded-2xl border border-white/5 overflow-hidden">
-            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-white/5">
-              <h2 className="text-lg font-semibold text-textPrimary flex items-baseline flex-wrap gap-x-2 gap-y-0">
-                Expense ledger
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-5 py-4 border-b border-white/5">
+              <h2 className="text-lg font-semibold text-textPrimary flex flex-col sm:flex-row sm:items-baseline sm:flex-wrap gap-x-2 gap-y-1 min-w-0">
+                <span>Expense ledger</span>
                 {Array.isArray(expenses) && expenses.length > 0 && (
                   <span className="text-sm font-normal text-textSecondary">
                     {ledgerFiltersActive
@@ -1548,7 +1548,7 @@ export default function GroupDetail() {
               {canAddExpense && (
                 <button
                   onClick={() => setAddExpenseOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-sm font-medium hover:bg-primary/30 flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-sm font-medium hover:bg-primary/30 flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
                 >
                   <svg
                     className="w-4 h-4"
@@ -1697,26 +1697,28 @@ export default function GroupDetail() {
                   {visibleLedgerExpenses.map((ex) => (
                     <li
                       key={ex._id}
-                      className="px-4 sm:px-5 py-3 sm:py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-white/5 active:bg-white/10 min-h-[52px]"
+                      className="px-4 sm:px-5 py-3.5 sm:py-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 hover:bg-white/5 active:bg-white/10"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-textPrimary font-medium truncate">
+                      <div className="w-full min-w-0 sm:flex-1 space-y-1.5">
+                        <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                          <span className="text-textPrimary font-medium text-[15px] sm:text-base leading-snug break-words [overflow-wrap:anywhere] min-w-0 flex-1">
                             {ex.description}
                           </span>
                           {ex.aiGenerated && (
                             <span
-                              className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90"
+                              className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90 self-center"
                               title="Parsed or categorized with AI"
                             >
                               AI
                             </span>
                           )}
                         </div>
-                        <span className="text-textSecondary text-xs sm:text-sm">
-                          {ex.payer?.name ?? "Unknown"} ·{" "}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs sm:text-sm text-textSecondary">
+                          <span className="font-medium text-textPrimary/85 max-w-full break-words">
+                            {ex.payer?.name ?? "Unknown"}
+                          </span>
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 ${getCategoryPillClass(
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 shrink-0 ${getCategoryPillClass(
                               ex.category === "Custom" && ex.customCategory
                                 ? ex.customCategory
                                 : ex.category,
@@ -1725,97 +1727,110 @@ export default function GroupDetail() {
                             {ex.category === "Custom" && ex.customCategory
                               ? ex.customCategory
                               : ex.category}
-                          </span>{" "}
-                          · {format(new Date(ex.date), "dd MMM")}
+                          </span>
+                          <span
+                            className="tabular-nums text-textSecondary whitespace-nowrap shrink-0"
+                          >
+                            {format(new Date(ex.date), "dd MMM yyyy")}
+                          </span>
                           {ex.addedBy?.name && (
-                            <>
-                              {" "}
-                              · Added by{" "}
-                              <span className="text-textPrimary/90">
+                            <span className="basis-full sm:basis-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-textSecondary min-w-0">
+                              <span className="whitespace-nowrap shrink-0 text-textSecondary/90">
+                                Added by
+                              </span>
+                              <span className="text-textPrimary/90 font-medium break-words min-w-0">
                                 {ex.addedBy.name}
                               </span>
-                            </>
+                            </span>
                           )}
-                        </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-primary font-semibold">
+                      <div className="flex w-full sm:w-auto shrink-0 flex-row items-center justify-between gap-3 sm:justify-end border-t border-white/5 pt-3 sm:border-t-0 sm:pt-0">
+                        <span className="text-primary font-semibold text-lg sm:text-base tabular-nums whitespace-nowrap">
                           ₹{toMoney(ex.amount)}
                         </span>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            canModifyLedgerExpense(ex) && setEditingExpense(ex)
-                          }
-                          disabled={!canModifyLedgerExpense(ex)}
-                          title={
-                            !canAddExpense
-                              ? "Can't edit - settlement is paid"
-                              : !canModifyLedgerExpense(ex)
-                                ? "Only the member who added this expense can edit it"
-                                : "Edit expense"
-                          }
-                          className={`inline-flex items-center gap-1.5 min-h-[36px] px-2.5 rounded-lg text-sm touch-manipulation ${
-                            canModifyLedgerExpense(ex)
-                              ? "text-textSecondary hover:text-primary hover:bg-white/5"
-                              : "text-textSecondary/40 cursor-not-allowed"
-                          }`}
-                        >
-                          <svg
-                            className="w-4 h-4 shrink-0"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            aria-hidden
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <button
+                            type="button"
+                            aria-label="Edit expense"
+                            onClick={() =>
+                              canModifyLedgerExpense(ex) &&
+                              setEditingExpense(ex)
+                            }
+                            disabled={!canModifyLedgerExpense(ex)}
+                            title={
+                              !canAddExpense
+                                ? "Can't edit - settlement is paid"
+                                : !canModifyLedgerExpense(ex)
+                                  ? "Only the member who added this expense can edit it"
+                                  : "Edit expense"
+                            }
+                            className={`inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] px-3 rounded-lg text-xs sm:text-sm touch-manipulation ${
+                              canModifyLedgerExpense(ex)
+                                ? "text-textSecondary hover:text-primary hover:bg-white/5"
+                                : "text-textSecondary/40 cursor-not-allowed"
+                            }`}
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                          </svg>
-                          Edit
-                        </button>
+                            <svg
+                              className="w-4 h-4 shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                              />
+                            </svg>
+                            <span className="hidden min-[380px]:inline">
+                              Edit
+                            </span>
+                          </button>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            canModifyLedgerExpense(ex) &&
-                            handleDeleteExpense(ex._id)
-                          }
-                          disabled={!canModifyLedgerExpense(ex)}
-                          title={
-                            !canAddExpense
-                              ? "Can't delete - settlement is paid"
-                              : !canModifyLedgerExpense(ex)
-                                ? "Only the member who added this expense can delete it"
-                                : "Delete expense"
-                          }
-                          className={`inline-flex items-center gap-1.5 min-h-[36px] px-2.5 rounded-lg text-sm touch-manipulation ${
-                            canModifyLedgerExpense(ex)
-                              ? "text-danger hover:bg-danger/10"
-                              : "text-danger/40 cursor-not-allowed"
-                          }`}
-                        >
-                          <svg
-                            className="w-4 h-4 shrink-0"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            aria-hidden
+                          <button
+                            type="button"
+                            aria-label="Delete expense"
+                            onClick={() =>
+                              canModifyLedgerExpense(ex) &&
+                              handleDeleteExpense(ex._id)
+                            }
+                            disabled={!canModifyLedgerExpense(ex)}
+                            title={
+                              !canAddExpense
+                                ? "Can't delete - settlement is paid"
+                                : !canModifyLedgerExpense(ex)
+                                  ? "Only the member who added this expense can delete it"
+                                  : "Delete expense"
+                            }
+                            className={`inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] px-3 rounded-lg text-xs sm:text-sm touch-manipulation ${
+                              canModifyLedgerExpense(ex)
+                                ? "text-danger hover:bg-danger/10"
+                                : "text-danger/40 cursor-not-allowed"
+                            }`}
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                          Delete
-                        </button>
+                            <svg
+                              className="w-4 h-4 shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                            <span className="hidden min-[380px]:inline">
+                              Delete
+                            </span>
+                          </button>
+                        </div>
                       </div>
                     </li>
                   ))}

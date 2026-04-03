@@ -56,6 +56,22 @@ const expenseSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    // Audit trail when a member updates an expense (description, amount, etc.)
+    editHistory: [
+      {
+        at: { type: Date, default: Date.now },
+        editedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        changes: {
+          type: mongoose.Schema.Types.Mixed,
+          default: {},
+          // e.g. { description: { from, to }, amount: { from, to } }
+        },
+      },
+    ],
   },
   { timestamps: true },
 );

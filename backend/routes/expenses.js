@@ -313,6 +313,12 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
         message: 'Only the member who added this expense can edit it',
       });
     }
+
+    const snap = {
+      description: expense.description,
+      amount: Number(expense.amount),
+    };
+
     const { description, amount, date, payer, category, customCategory, aiGenerated, aiRawInput, participants, splitType, splitValues } = req.body;
     if (description?.trim()) expense.description = description.trim();
     if (amount != null && amount >= 0.01) expense.amount = Number(amount);
@@ -344,10 +350,28 @@ router.put('/:groupId/expenses/:expenseId', groupMember, async (req, res) => {
     }
     if (typeof aiGenerated === 'boolean') expense.aiGenerated = aiGenerated;
     if (typeof aiRawInput === 'string') expense.aiRawInput = aiRawInput.slice(0, 2000);
+
+    const changes = {};
+    if ((expense.description || '').trim() !== (snap.description || '').trim()) {
+      changes.description = { from: snap.description, to: expense.description };
+    }
+    if (Math.abs(Number(expense.amount) - snap.amount) > 0.009) {
+      changes.amount = { from: snap.amount, to: Number(expense.amount) };
+    }
+    if (Object.keys(changes).length > 0) {
+      if (!Array.isArray(expense.editHistory)) expense.editHistory = [];
+      expense.editHistory.push({
+        at: new Date(),
+        editedBy: req.user._id,
+        changes,
+      });
+    }
+
     await expense.save();
     const populated = await Expense.findById(expense._id)
       .populate('payer', 'name email')
-      .populate('addedBy', 'name');
+      .populate('addedBy', 'name')
+      .populate('editHistory.editedBy', 'name email');
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to update expense' });

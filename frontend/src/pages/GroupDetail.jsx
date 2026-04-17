@@ -64,20 +64,195 @@ function resolveExpenseCategoryForLedger(ex) {
 
 const getCategoryPillClass = (category) => {
   const c = String(category || "").toLowerCase();
-  if (c === "food") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
-  if (c === "groceries") return "bg-lime-500/15 text-lime-300 border-lime-500/25";
+  if (c === "food")
+    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
+  if (c === "groceries")
+    return "bg-lime-500/15 text-lime-300 border-lime-500/25";
   if (c === "travel") return "bg-sky-500/15 text-sky-300 border-sky-500/25";
-  if (c === "rent") return "bg-violet-500/15 text-violet-300 border-violet-500/25";
+  if (c === "rent")
+    return "bg-violet-500/15 text-violet-300 border-violet-500/25";
   if (c === "bills" || c === "utilities")
     return "bg-amber-500/15 text-amber-300 border-amber-500/25";
-  if (c === "shopping") return "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/25";
+  if (c === "shopping")
+    return "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/25";
   if (c === "entertainment")
     return "bg-pink-500/15 text-pink-300 border-pink-500/25";
   if (c === "health") return "bg-red-500/15 text-red-300 border-red-500/25";
-  if (c === "others") return "bg-slate-500/15 text-slate-200 border-slate-500/25";
+  if (c === "others")
+    return "bg-slate-500/15 text-slate-200 border-slate-500/25";
   if (c === "misc") return "bg-slate-400/10 text-slate-200 border-slate-400/20";
   return "bg-white/5 text-textSecondary border-white/10";
 };
+
+function ExpenseLedgerRow({
+  ex,
+  memberMap,
+  canModifyLedgerExpense,
+  setEditingExpense,
+  handleDeleteExpense,
+  canAddExpense,
+  toMoney,
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  return (
+    <li className="px-4 sm:px-5 py-3.5 sm:py-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 hover:bg-white/5 active:bg-white/10">
+      <div className="w-full min-w-0 sm:flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <span className="text-textPrimary font-medium text-[15px] sm:text-base leading-snug break-words [overflow-wrap:anywhere] min-w-0">
+            {ex.description}
+          </span>
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 shrink-0 ${getCategoryPillClass(resolveExpenseCategoryForLedger(ex))}`}
+          >
+            {resolveExpenseCategoryForLedger(ex)}
+          </span>
+          {ex.aiGenerated && (
+            <span
+              className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90"
+              title="Parsed or categorized with AI"
+            >
+              AI
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-textSecondary">
+          <span className="font-medium text-textPrimary/85 max-w-full break-words">
+            {ex.payer?.name ?? "Unknown"}
+          </span>
+          <span className="text-textSecondary/50">·</span>
+          <span className="tabular-nums whitespace-nowrap shrink-0">
+            {format(new Date(ex.date), "dd MMM yyyy")}
+          </span>
+          {ex.addedBy?.name &&
+            resolveExpensePayerId(ex) !== expenseAddedById(ex) && (
+              <span className="basis-full sm:basis-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-textSecondary min-w-0 sm:mt-0">
+                <span className="text-textSecondary/50">·</span>
+                <span className="whitespace-nowrap shrink-0 text-textSecondary/90">
+                  Added by
+                </span>
+                <span className="text-textPrimary/90 font-medium break-words min-w-0">
+                  {ex.addedBy.name}
+                </span>
+              </span>
+            )}
+        </div>
+        <button
+          type="button"
+          className="block mt-2 text-xs text-primary underline hover:no-underline focus:outline-none"
+          onClick={() => setIsExpanded((v) => !v)}
+        >
+          {isExpanded ? "Hide details" : "Show details"}
+        </button>
+        {isExpanded && (
+          <div className="mt-2 rounded-lg bg-darkBg/60 border border-white/10 p-3 text-sm">
+            <div className="mb-2">
+              <span className="font-semibold">Split type:</span>{" "}
+              {ex.splitType || "equal"}
+            </div>
+            <div className="mb-2">
+              <span className="font-semibold">Split among:</span>{" "}
+              {Array.isArray(ex.participants) && ex.participants.length > 0 ? (
+                <ul className="list-disc ml-6 mt-1">
+                  {ex.participants.map((p) => {
+                    const id = typeof p === "object" ? p._id : p;
+                    const name = memberMap.get(String(id)) || id;
+                    return <li key={id}>{name}</li>;
+                  })}
+                </ul>
+              ) : (
+                <span className="ml-2">All group members</span>
+              )}
+            </div>
+            {ex.splitValues && Object.keys(ex.splitValues).length > 0 && (
+              <div className="mb-2">
+                <span className="font-semibold">Split values:</span>
+                <ul className="list-disc ml-6 mt-1">
+                  {Object.entries(ex.splitValues).map(([userId, value]) => {
+                    const name = memberMap.get(String(userId)) || userId;
+                    return (
+                      <li key={userId}>
+                        {name}: {value}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="flex w-full sm:w-auto shrink-0 flex-row items-center justify-between gap-3 sm:justify-end border-t border-white/5 pt-3 sm:border-t-0 sm:pt-0">
+        <span className="text-primary font-semibold text-lg sm:text-base tabular-nums whitespace-nowrap">
+          ₹{toMoney(ex.amount)}
+        </span>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <button
+            type="button"
+            aria-label="Edit expense"
+            onClick={() => canModifyLedgerExpense(ex) && setEditingExpense(ex)}
+            disabled={!canModifyLedgerExpense(ex)}
+            title={
+              !canAddExpense
+                ? "Can't edit - settlement is paid"
+                : !canModifyLedgerExpense(ex)
+                  ? "Only the member who added this expense can edit it"
+                  : "Edit expense"
+            }
+            className={`inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] px-3 rounded-lg text-xs sm:text-sm touch-manipulation ${canModifyLedgerExpense(ex) ? "text-textSecondary hover:text-primary hover:bg-white/5" : "text-textSecondary/40 cursor-not-allowed"}`}
+          >
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+            <span className="hidden min-[380px]:inline">Edit</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Delete expense"
+            onClick={() =>
+              canModifyLedgerExpense(ex) && handleDeleteExpense(ex._id)
+            }
+            disabled={!canModifyLedgerExpense(ex)}
+            title={
+              !canAddExpense
+                ? "Can't delete - settlement is paid"
+                : !canModifyLedgerExpense(ex)
+                  ? "Only the member who added this expense can delete it"
+                  : "Delete expense"
+            }
+            className={`inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] px-3 rounded-lg text-xs sm:text-sm touch-manipulation ${canModifyLedgerExpense(ex) ? "text-danger hover:bg-danger/10" : "text-danger/40 cursor-not-allowed"}`}
+          >
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            <span className="hidden min-[380px]:inline">Delete</span>
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+}
 
 export default function GroupDetail() {
   const { groupId } = useParams();
@@ -1306,9 +1481,9 @@ export default function GroupDetail() {
                               ₹{toMoney(paid)}
                             </td>
 
-                          <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
-                            ₹{toMoney(rowShare)}
-                          </td>
+                            <td className="px-3 sm:px-5 py-3 text-right text-textSecondary text-sm">
+                              ₹{toMoney(rowShare)}
+                            </td>
 
                             <td
                               className={`px-3 sm:px-5 py-3 text-right text-sm ${
@@ -1435,51 +1610,51 @@ export default function GroupDetail() {
                 and balances (not financial advice).
               </p>
               <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={handleAiMonthSummary}
-                disabled={aiSummaryLoading || aiSummaryOnCooldown}
-                className="px-4 py-2.5 rounded-lg bg-primary/15 text-primary text-sm font-medium border border-primary/30 hover:bg-primary/25 disabled:opacity-60 flex items-center gap-2 min-w-[11rem] justify-center"
-              >
-                {aiSummaryLoading ? (
-                  <>
-                    <svg
-                      className="h-4 w-4 animate-spin text-primary shrink-0"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      aria-hidden
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-90"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Generating…
-                  </>
-                ) : aiSummaryOnCooldown ? (
-                  `Wait ${aiSummaryCooldownSec}s`
-                ) : (
-                  "Generate summary"
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleForecastNextMonth}
-                disabled={aiForecastLoading}
-                className="px-4 py-2.5 rounded-lg bg-surface border border-white/10 text-textPrimary text-sm font-medium hover:border-primary/30 disabled:opacity-60"
-              >
-                {aiForecastLoading ? "Forecasting…" : "Forecast next month"}
-              </button>
+                <button
+                  type="button"
+                  onClick={handleAiMonthSummary}
+                  disabled={aiSummaryLoading || aiSummaryOnCooldown}
+                  className="px-4 py-2.5 rounded-lg bg-primary/15 text-primary text-sm font-medium border border-primary/30 hover:bg-primary/25 disabled:opacity-60 flex items-center gap-2 min-w-[11rem] justify-center"
+                >
+                  {aiSummaryLoading ? (
+                    <>
+                      <svg
+                        className="h-4 w-4 animate-spin text-primary shrink-0"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        aria-hidden
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-90"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      Generating…
+                    </>
+                  ) : aiSummaryOnCooldown ? (
+                    `Wait ${aiSummaryCooldownSec}s`
+                  ) : (
+                    "Generate summary"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleForecastNextMonth}
+                  disabled={aiForecastLoading}
+                  className="px-4 py-2.5 rounded-lg bg-surface border border-white/10 text-textPrimary text-sm font-medium hover:border-primary/30 disabled:opacity-60"
+                >
+                  {aiForecastLoading ? "Forecasting…" : "Forecast next month"}
+                </button>
               </div>
               {aiSummaryOnCooldown && !aiSummaryLoading && (
                 <p className="mt-2 text-xs text-textSecondary">
@@ -1499,42 +1674,63 @@ export default function GroupDetail() {
                     Upcoming month estimate
                   </h3>
                   <p className="text-sm text-textPrimary">
-                    Estimated <span className="font-semibold">{aiForecast.nextMonth}</span>{" "}
-                    total: <span className="text-primary font-semibold">₹{toMoney(aiForecast.forecast)}</span>
+                    Estimated{" "}
+                    <span className="font-semibold">
+                      {aiForecast.nextMonth}
+                    </span>{" "}
+                    total:{" "}
+                    <span className="text-primary font-semibold">
+                      ₹{toMoney(aiForecast.forecast)}
+                    </span>
                   </p>
-                  {Array.isArray(aiForecast?.basis?.months) && aiForecast.basis.months.length > 0 && (
-                    <p className="text-xs text-textSecondary mt-1">
-                      Based on{" "}
-                      {aiForecast.basis.months
-                        .map((m, i) => `${m} (₹${toMoney(aiForecast.basis.totals?.[i])})`)
-                        .join(" · ")}
-                      {Array.isArray(aiForecast.basis.weights)
-                        ? ` with weights ${aiForecast.basis.weights.map((w) => Math.round(w * 100)).join("% / ")}%`
-                        : ""}
-                      {aiForecast.basis.percentChange != null ? `, latest change ${aiForecast.basis.percentChange}%` : ""}.
-                    </p>
-                  )}
-                  {Array.isArray(aiForecast?.userForecast) && aiForecast.userForecast.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-primary mb-2">
-                        Predicted user-wise spend
-                      </h4>
-                      <ul className="space-y-1.5">
-                        {aiForecast.userForecast.slice(0, 8).map((u) => (
-                          <li key={u.userId} className="text-sm text-textPrimary flex items-center justify-between gap-3">
-                            <span className="truncate">{u.name}</span>
-                            <span className="font-semibold text-primary">₹{toMoney(u.forecastAmount)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {Array.isArray(aiForecast?.basis?.months) &&
+                    aiForecast.basis.months.length > 0 && (
+                      <p className="text-xs text-textSecondary mt-1">
+                        Based on{" "}
+                        {aiForecast.basis.months
+                          .map(
+                            (m, i) =>
+                              `${m} (₹${toMoney(aiForecast.basis.totals?.[i])})`,
+                          )
+                          .join(" · ")}
+                        {Array.isArray(aiForecast.basis.weights)
+                          ? ` with weights ${aiForecast.basis.weights.map((w) => Math.round(w * 100)).join("% / ")}%`
+                          : ""}
+                        {aiForecast.basis.percentChange != null
+                          ? `, latest change ${aiForecast.basis.percentChange}%`
+                          : ""}
+                        .
+                      </p>
+                    )}
+                  {Array.isArray(aiForecast?.userForecast) &&
+                    aiForecast.userForecast.length > 0 && (
+                      <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-primary mb-2">
+                          Predicted user-wise spend
+                        </h4>
+                        <ul className="space-y-1.5">
+                          {aiForecast.userForecast.slice(0, 8).map((u) => (
+                            <li
+                              key={u.userId}
+                              className="text-sm text-textPrimary flex items-center justify-between gap-3"
+                            >
+                              <span className="truncate">{u.name}</span>
+                              <span className="font-semibold text-primary">
+                                ₹{toMoney(u.forecastAmount)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                 </div>
               )}
               {aiSummary && (
                 <div
                   className={`mt-4 border-t border-white/10 pt-4 transition-opacity duration-200 space-y-4 ${
-                    aiSummaryLoading ? "opacity-50 pointer-events-none" : "opacity-100"
+                    aiSummaryLoading
+                      ? "opacity-50 pointer-events-none"
+                      : "opacity-100"
                   }`}
                 >
                   <div>
@@ -1545,18 +1741,19 @@ export default function GroupDetail() {
                       {aiSummary}
                     </p>
                   </div>
-                  {Array.isArray(aiSummarySavings) && aiSummarySavings.length > 0 && (
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90 mb-2">
-                        Where to save next month
-                      </h3>
-                      <ul className="list-disc list-inside space-y-2 text-sm text-textPrimary leading-relaxed marker:text-emerald-500/80">
-                        {aiSummarySavings.map((line, idx) => (
-                          <li key={idx}>{line}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {Array.isArray(aiSummarySavings) &&
+                    aiSummarySavings.length > 0 && (
+                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90 mb-2">
+                          Where to save next month
+                        </h3>
+                        <ul className="list-disc list-inside space-y-2 text-sm text-textPrimary leading-relaxed marker:text-emerald-500/80">
+                          {aiSummarySavings.map((line, idx) => (
+                            <li key={idx}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                 </div>
               )}
             </div>
@@ -1732,143 +1929,19 @@ export default function GroupDetail() {
               <>
                 <ul className="divide-y divide-white/5">
                   {visibleLedgerExpenses.map((ex) => (
-                    <li
+                    <ExpenseLedgerRow
                       key={ex._id}
-                      className="px-4 sm:px-5 py-3.5 sm:py-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 hover:bg-white/5 active:bg-white/10"
-                    >
-                      <div className="w-full min-w-0 sm:flex-1 space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                          <span className="text-textPrimary font-medium text-[15px] sm:text-base leading-snug break-words [overflow-wrap:anywhere] min-w-0">
-                            {ex.description}
-                          </span>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] sm:text-xs leading-5 shrink-0 ${getCategoryPillClass(
-                              resolveExpenseCategoryForLedger(ex),
-                            )}`}
-                          >
-                            {resolveExpenseCategoryForLedger(ex)}
-                          </span>
-                          {ex.aiGenerated && (
-                            <span
-                              className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90"
-                              title="Parsed or categorized with AI"
-                            >
-                              AI
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-textSecondary">
-                          <span className="font-medium text-textPrimary/85 max-w-full break-words">
-                            {ex.payer?.name ?? "Unknown"}
-                          </span>
-                          <span className="text-textSecondary/50">·</span>
-                          <span className="tabular-nums whitespace-nowrap shrink-0">
-                            {format(new Date(ex.date), "dd MMM yyyy")}
-                          </span>
-                          {ex.addedBy?.name &&
-                            resolveExpensePayerId(ex) !== expenseAddedById(ex) && (
-                              <span className="basis-full sm:basis-auto flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-textSecondary min-w-0 sm:mt-0">
-                                <span className="text-textSecondary/50">·</span>
-                                <span className="whitespace-nowrap shrink-0 text-textSecondary/90">
-                                  Added by
-                                </span>
-                                <span className="text-textPrimary/90 font-medium break-words min-w-0">
-                                  {ex.addedBy.name}
-                                </span>
-                              </span>
-                            )}
-                        </div>
-                      </div>
-
-                      <div className="flex w-full sm:w-auto shrink-0 flex-row items-center justify-between gap-3 sm:justify-end border-t border-white/5 pt-3 sm:border-t-0 sm:pt-0">
-                        <span className="text-primary font-semibold text-lg sm:text-base tabular-nums whitespace-nowrap">
-                          ₹{toMoney(ex.amount)}
-                        </span>
-                        <div className="flex items-center gap-1 sm:gap-2">
-                          <button
-                            type="button"
-                            aria-label="Edit expense"
-                            onClick={() =>
-                              canModifyLedgerExpense(ex) &&
-                              setEditingExpense(ex)
-                            }
-                            disabled={!canModifyLedgerExpense(ex)}
-                            title={
-                              !canAddExpense
-                                ? "Can't edit - settlement is paid"
-                                : !canModifyLedgerExpense(ex)
-                                  ? "Only the member who added this expense can edit it"
-                                  : "Edit expense"
-                            }
-                            className={`inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] px-3 rounded-lg text-xs sm:text-sm touch-manipulation ${
-                              canModifyLedgerExpense(ex)
-                                ? "text-textSecondary hover:text-primary hover:bg-white/5"
-                                : "text-textSecondary/40 cursor-not-allowed"
-                            }`}
-                          >
-                            <svg
-                              className="w-4 h-4 shrink-0"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              aria-hidden
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                              />
-                            </svg>
-                            <span className="hidden min-[380px]:inline">
-                              Edit
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            aria-label="Delete expense"
-                            onClick={() =>
-                              canModifyLedgerExpense(ex) &&
-                              handleDeleteExpense(ex._id)
-                            }
-                            disabled={!canModifyLedgerExpense(ex)}
-                            title={
-                              !canAddExpense
-                                ? "Can't delete - settlement is paid"
-                                : !canModifyLedgerExpense(ex)
-                                  ? "Only the member who added this expense can delete it"
-                                  : "Delete expense"
-                            }
-                            className={`inline-flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] px-3 rounded-lg text-xs sm:text-sm touch-manipulation ${
-                              canModifyLedgerExpense(ex)
-                                ? "text-danger hover:bg-danger/10"
-                                : "text-danger/40 cursor-not-allowed"
-                            }`}
-                          >
-                            <svg
-                              className="w-4 h-4 shrink-0"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              aria-hidden
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                            <span className="hidden min-[380px]:inline">
-                              Delete
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-                    </li>
+                      ex={ex}
+                      memberMap={memberMap}
+                      canModifyLedgerExpense={canModifyLedgerExpense}
+                      setEditingExpense={setEditingExpense}
+                      handleDeleteExpense={handleDeleteExpense}
+                      canAddExpense={canAddExpense}
+                      toMoney={toMoney}
+                    />
                   ))}
                 </ul>
+
                 {filteredLedgerExpenses.length > LEDGER_PREVIEW_COUNT && (
                   <div className="px-4 sm:px-5 py-3 border-t border-white/5 flex justify-center sm:justify-start">
                     <button

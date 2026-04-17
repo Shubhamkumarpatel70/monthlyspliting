@@ -88,6 +88,7 @@ export default function Expenses() {
   const [users, setUsers] = useState([]);
 
   const [historyExpense, setHistoryExpense] = useState(null);
+  const [expandedExpenseId, setExpandedExpenseId] = useState(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -169,7 +170,9 @@ export default function Expenses() {
   if (!isAdminUser) {
     return (
       <div className="p-6 rounded-2xl bg-surface border border-white/10 max-w-lg">
-        <h1 className="text-xl font-bold text-textPrimary">Expense management</h1>
+        <h1 className="text-xl font-bold text-textPrimary">
+          Expense management
+        </h1>
         <p className="text-textSecondary text-sm mt-2">
           This area is only available to administrators. Use the main app as a
           group member to add or edit your own expenses.
@@ -239,21 +242,20 @@ export default function Expenses() {
                   : "₹ sum across all rows matching your filters."}
             </p>
           </div>
-          {summary.hasGroupFilter &&
-            summary.groupAllTimeTotal != null && (
-              <div className="bg-surface rounded-xl border border-primary/20 p-4 sm:col-span-2 lg:col-span-1">
-                <p className="text-textSecondary text-xs uppercase tracking-wide mb-1">
-                  Group · all months
-                </p>
-                <p className="text-2xl font-bold text-textPrimary">
-                  ₹{formatMoney(summary.groupAllTimeTotal)}
-                </p>
-                <p className="text-textSecondary text-xs mt-1">
-                  {(summary.groupAllTimeCount ?? 0).toLocaleString()} expenses in
-                  this group (ignores month, payer, category & search filters)
-                </p>
-              </div>
-            )}
+          {summary.hasGroupFilter && summary.groupAllTimeTotal != null && (
+            <div className="bg-surface rounded-xl border border-primary/20 p-4 sm:col-span-2 lg:col-span-1">
+              <p className="text-textSecondary text-xs uppercase tracking-wide mb-1">
+                Group · all months
+              </p>
+              <p className="text-2xl font-bold text-textPrimary">
+                ₹{formatMoney(summary.groupAllTimeTotal)}
+              </p>
+              <p className="text-textSecondary text-xs mt-1">
+                {(summary.groupAllTimeCount ?? 0).toLocaleString()} expenses in
+                this group (ignores month, payer, category & search filters)
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -452,104 +454,182 @@ export default function Expenses() {
                         Array.isArray(expense.editHistory) &&
                         expense.editHistory.length > 0;
 
+                      const isExpanded = expandedExpenseId === expense._id;
                       return (
-                        <tr key={expense._id} className="hover:bg-white/5">
-                          <td className="px-4 py-3 align-top max-w-[240px]">
-                            <p className="text-textPrimary font-medium text-sm break-words">
-                              {expense.description}
-                            </p>
-                            {lastDesc && (
-                              <p className="text-[11px] sm:text-xs text-amber-400/90 mt-1.5 leading-snug space-y-0.5">
-                                <span className="text-textSecondary block">
-                                  Last text change:
-                                </span>
-                                <span className="line-through opacity-75 break-words">
-                                  {String(lastDesc.from ?? "—")}
-                                </span>
-                                <span className="text-textSecondary"> → </span>
-                                <span className="break-words">
-                                  {String(lastDesc.to ?? "—")}
-                                </span>
+                        <>
+                          <tr key={expense._id} className="hover:bg-white/5">
+                            <td className="px-4 py-3 align-top max-w-[240px]">
+                              <p className="text-textPrimary font-medium text-sm break-words">
+                                {expense.description}
                               </p>
-                            )}
-                            {expense.aiGenerated && (
-                              <span className="inline-block mt-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90">
-                                AI
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 align-top whitespace-nowrap">
-                            <span className="text-textPrimary font-semibold">
-                              ₹{formatMoney(expense.amount)}
-                            </span>
-                            {lastAmt && (
-                              <p className="text-[11px] sm:text-xs text-amber-400/90 mt-1.5 whitespace-normal">
-                                <span className="text-textSecondary">
-                                  Last amount change:
-                                </span>
-                                <br />
-                                ₹{formatMoney(lastAmt.from)} → ₹
-                                {formatMoney(lastAmt.to)}
-                              </p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 align-top text-sm text-textPrimary">
-                            {categoryLabel(expense)}
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            <p className="text-textPrimary text-sm">
-                              {expense.payer?.name || "—"}
-                            </p>
-                            <p className="text-textSecondary text-xs truncate max-w-[140px]">
-                              {expense.payer?.email}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3 align-top text-sm text-textPrimary">
-                            {expense.group?.name || "—"}
-                          </td>
-                          <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
-                            {expense.month || "—"}
-                          </td>
-                          <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
-                            {formatExpenseDate(expense.date)}
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            <div className="flex flex-col gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setHistoryExpense(expense)}
-                                disabled={uiDisabled}
-                                title={
-                                  hasHistory
-                                    ? "View full edit history"
-                                    : "No edits recorded yet"
-                                }
-                                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg border border-white/15 bg-darkBg/60 text-textPrimary text-xs font-medium hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                              >
-                                <svg
-                                  className="w-3.5 h-3.5 shrink-0 text-primary"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  aria-hidden
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                                  />
-                                </svg>
-                                History
-                              </button>
-                              {!hasHistory && (
-                                <span className="text-[10px] text-textSecondary">
-                                  No edits
+                              {lastDesc && (
+                                <p className="text-[11px] sm:text-xs text-amber-400/90 mt-1.5 leading-snug space-y-0.5">
+                                  <span className="text-textSecondary block">
+                                    Last text change:
+                                  </span>
+                                  <span className="line-through opacity-75 break-words">
+                                    {String(lastDesc.from ?? "—")}
+                                  </span>
+                                  <span className="text-textSecondary">
+                                    {" "}
+                                    →{" "}
+                                  </span>
+                                  <span className="break-words">
+                                    {String(lastDesc.to ?? "—")}
+                                  </span>
+                                </p>
+                              )}
+                              {expense.aiGenerated && (
+                                <span className="inline-block mt-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-primary/30 text-primary/90">
+                                  AI
                                 </span>
                               )}
-                            </div>
-                          </td>
-                        </tr>
+                              <button
+                                type="button"
+                                className="block mt-2 text-xs text-primary underline hover:no-underline focus:outline-none"
+                                onClick={() =>
+                                  setExpandedExpenseId(
+                                    isExpanded ? null : expense._id,
+                                  )
+                                }
+                              >
+                                {isExpanded ? "Hide details" : "Show details"}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 align-top whitespace-nowrap">
+                              <span className="text-textPrimary font-semibold">
+                                ₹{formatMoney(expense.amount)}
+                              </span>
+                              {lastAmt && (
+                                <p className="text-[11px] sm:text-xs text-amber-400/90 mt-1.5 whitespace-normal">
+                                  <span className="text-textSecondary">
+                                    Last amount change:
+                                  </span>
+                                  <br />₹{formatMoney(lastAmt.from)} → ₹
+                                  {formatMoney(lastAmt.to)}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 align-top text-sm text-textPrimary">
+                              {categoryLabel(expense)}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <p className="text-textPrimary text-sm">
+                                {expense.payer?.name || "—"}
+                              </p>
+                              <p className="text-textSecondary text-xs truncate max-w-[140px]">
+                                {expense.payer?.email}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 align-top text-sm text-textPrimary">
+                              {expense.group?.name || "—"}
+                            </td>
+                            <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
+                              {expense.month || "—"}
+                            </td>
+                            <td className="px-4 py-3 align-top text-textSecondary text-sm whitespace-nowrap">
+                              {formatExpenseDate(expense.date)}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <div className="flex flex-col gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setHistoryExpense(expense)}
+                                  disabled={uiDisabled}
+                                  title={
+                                    hasHistory
+                                      ? "View full edit history"
+                                      : "No edits recorded yet"
+                                  }
+                                  className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg border border-white/15 bg-darkBg/60 text-textPrimary text-xs font-medium hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  <svg
+                                    className="w-3.5 h-3.5 shrink-0 text-primary"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    aria-hidden
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
+                                  </svg>
+                                  History
+                                </button>
+                                {!hasHistory && (
+                                  <span className="text-[10px] text-textSecondary">
+                                    No edits
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="bg-darkBg/70">
+                              <td
+                                colSpan={8}
+                                className="px-6 pb-4 pt-2 text-sm text-textPrimary"
+                              >
+                                <div className="mb-2">
+                                  <span className="font-semibold">
+                                    Split type:
+                                  </span>{" "}
+                                  {expense.splitType || "equal"}
+                                </div>
+                                <div className="mb-2">
+                                  <span className="font-semibold">
+                                    Split among:
+                                  </span>
+                                  {Array.isArray(expense.participants) &&
+                                  expense.participants.length > 0 ? (
+                                    <ul className="list-disc ml-6 mt-1">
+                                      {expense.participants.map((p) => {
+                                        let userId =
+                                          typeof p === "object" ? p._id : p;
+                                        let userObj = users.find(
+                                          (u) => u._id === userId,
+                                        );
+                                        return (
+                                          <li key={userId}>
+                                            {userObj
+                                              ? `${userObj.name}${userObj.email ? ` (${userObj.email})` : ""}`
+                                              : userId}
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  ) : (
+                                    <span className="ml-2">
+                                      All group members
+                                    </span>
+                                  )}
+                                </div>
+                                {expense.splitValues &&
+                                  Object.keys(expense.splitValues).length >
+                                    0 && (
+                                    <div className="mb-2">
+                                      <span className="font-semibold">
+                                        Split values:
+                                      </span>
+                                      <ul className="list-disc ml-6 mt-1">
+                                        {Object.entries(
+                                          expense.splitValues,
+                                        ).map(([userId, value]) => (
+                                          <li key={userId}>
+                                            {userId}: {value}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                {/* Add clearance type here if available in data */}
+                              </td>
+                            </tr>
+                          )}
+                        </>
                       );
                     })
                   )}
@@ -638,8 +718,8 @@ export default function Expenses() {
               {!Array.isArray(historyExpense.editHistory) ||
               historyExpense.editHistory.length === 0 ? (
                 <p className="text-textSecondary text-sm">
-                  No edits have been recorded for this expense yet. Changes
-                  made after this update ships will appear here.
+                  No edits have been recorded for this expense yet. Changes made
+                  after this update ships will appear here.
                 </p>
               ) : (
                 [...historyExpense.editHistory]

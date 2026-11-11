@@ -268,6 +268,11 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <footer className="w-full px-4 py-4 text-center border-t border-white/5 bg-darkBg/95">
+        <p className="text-textSecondary text-xs tracking-wide">
+          Powered by <span className="font-semibold text-primary">ASKC TECHNOLOGIES</span>
+        </p>
+      </footer>
     </>
   );
 }

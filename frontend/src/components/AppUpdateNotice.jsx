@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 
 const UPDATE_URL = '/app-update.json';
 const FALLBACK_APK_URL = 'https://github.com/Shubhamkumarpatel70/monthlyspliting/releases/latest';
+const ACK_KEY = 'monthly-split-acknowledged-version';
+const SNOOZE_KEY = 'monthly-split-update-remind-at';
+const REMIND_AFTER_MS = 36 * 60 * 60 * 1000;
 
 export default function AppUpdateNotice() {
   const [update, setUpdate] = useState(null);
@@ -17,22 +20,41 @@ export default function AppUpdateNotice() {
       .then((data) => {
         if (!active || !data?.version) return;
         setUpdate(data);
-        const key = 'monthly-split-seen-version';
-        const seen = localStorage.getItem(key);
-        if (!seen) {
-          localStorage.setItem(key, data.version);
-        } else if (seen !== data.version) {
-          setShowUpdate(true);
+
+        const acknowledgedVersion = localStorage.getItem(ACK_KEY);
+        const legacySeenVersion = localStorage.getItem('monthly-split-seen-version');
+
+        // First visit: establish the current version without showing a false update alert.
+        if (!acknowledgedVersion && !legacySeenVersion) {
+          localStorage.setItem(ACK_KEY, data.version);
+          return;
         }
+
+        // The user has already confirmed this version; do not show it again.
+        if (acknowledgedVersion === data.version) return;
+
+        // A reminder was dismissed recently; wait 36 hours before showing it again.
+        const remindAt = Number(localStorage.getItem(SNOOZE_KEY) || 0);
+        if (Date.now() < remindAt) return;
+
+        setShowUpdate(true);
       })
       .catch(() => {});
     return () => { active = false; };
   }, []);
 
-  const dismiss = () => {
+  const confirmUpdated = () => {
     if (update?.version) {
-      localStorage.setItem('monthly-split-seen-version', update.version);
+      localStorage.setItem(ACK_KEY, update.version);
+      localStorage.removeItem(SNOOZE_KEY);
     }
+    setShowUpdate(false);
+    // The app loads the live website, so reload applies the latest deployed website.
+    window.location.reload();
+  };
+
+  const remindLater = () => {
+    localStorage.setItem(SNOOZE_KEY, String(Date.now() + REMIND_AFTER_MS));
     setShowUpdate(false);
   };
 
@@ -70,9 +92,14 @@ export default function AppUpdateNotice() {
             <p className="mb-5 text-sm leading-6 text-textSecondary">
               {update.message || 'New improvements are now available.'}
             </p>
-            <button onClick={dismiss} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-darkBg">
-              Got it
-            </button>
+            <div className="flex flex-col gap-2">
+              <button onClick={confirmUpdated} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-darkBg">
+                Update now
+              </button>
+              <button onClick={remindLater} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-textSecondary">
+                Remind me in 36 hours
+              </button>
+            </div>
           </div>
         </div>
       )}

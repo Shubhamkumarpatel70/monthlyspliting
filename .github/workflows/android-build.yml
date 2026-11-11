@@ -1,0 +1,70 @@
+name: Build Monthly Split Android App
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "frontend/**"
+      - "backend/**"
+      - "capacitor.config.json"
+      - ".github/workflows/android-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build web app for Android
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: https://monthlyspliting-otrm.onrender.com
+        run: npm run build
+
+      - name: Generate Android project
+        run: npx cap add android
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build debug APK and release AAB
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug bundleRelease
+
+      - name: Upload Android build files
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-split-android-build
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14

@@ -7,12 +7,18 @@
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
     "build": "cd frontend && npm ci --include=dev && npm run build && cd ../backend && npm ci",
     "start": "cd backend && node server.js",
-    "build:start": "npm run build && npm run start"
+    "build:start": "npm run build && npm run start",
+    "android:sync": "cap sync android"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "react-icons": "^5.6.0"
+    "react-icons": "^5.6.0",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/android": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
   }
 }

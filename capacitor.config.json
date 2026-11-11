@@ -1,0 +1,8 @@
+{
+  "appId": "in.askctechnologies.monthlysplit",
+  "appName": "Monthly Split",
+  "webDir": "frontend/dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

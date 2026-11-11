@@ -1,19 +1,14 @@
-name: Build Monthly Split Android App
+name: Build and Release Monthly Split Android APK
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - "package.json"
-      - "package-lock.json"
-      - "frontend/**"
-      - "backend/**"
-      - "capacitor.config.json"
-      - ".github/workflows/android-build.yml"
+      - "frontend/public/app-update.json"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android:
@@ -41,7 +36,7 @@ jobs:
         working-directory: frontend
         run: npm install
 
-      - name: Build web app for Android
+      - name: Build web app
         working-directory: frontend
         env:
           VITE_API_BASE_URL: https://monthlyspliting-otrm.onrender.com
@@ -53,18 +48,22 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Build debug APK and release AAB
+      - name: Build APK
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug bundleRelease
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../monthly-split.apk
 
-      - name: Upload Android build files
-        uses: actions/upload-artifact@v4
+      - name: Read app version
+        id: app
+        run: echo "version=$(node -p "require('./frontend/public/app-update.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish APK GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: monthly-split-android-build
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/bundle/release/app-release.aab
-          if-no-files-found: error
-          retention-days: 14
+          tag_name: v${{ steps.app.outputs.version }}
+          name: Monthly Split v${{ steps.app.outputs.version }}
+          target_commitish: main
+          generate_release_notes: true
+          files: monthly-split.apk

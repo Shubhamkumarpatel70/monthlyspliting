@@ -3,6 +3,8 @@
   "appName": "Monthly Split",
   "webDir": "frontend/dist",
   "server": {
+    "url": "https://monthlyspliting-otrm.onrender.com",
+    "cleartext": false,
     "androidScheme": "https"
   }
 }

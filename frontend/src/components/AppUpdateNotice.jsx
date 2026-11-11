@@ -97,7 +97,7 @@ export default function AppUpdateNotice() {
                 Update now
               </button>
               <button onClick={remindLater} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-textSecondary">
-                Remind me in 36 hours
+                Remind me later
               </button>
             </div>
           </div>

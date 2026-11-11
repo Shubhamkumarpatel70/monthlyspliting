@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 const UPDATE_URL = '/app-update.json';
-const FALLBACK_APK_URL = 'https://github.com/Shubhamkumarpatel70/monthlyspliting/releases/latest';
+const FALLBACK_APK_URL = 'https://github.com/Shubhamkumarpatel70/monthlyspliting/releases/latest/download/monthly-split.apk';
 const ACK_KEY = 'monthly-split-acknowledged-version';
 const SNOOZE_KEY = 'monthly-split-update-remind-at';
 const REMIND_AFTER_MS = 36 * 60 * 60 * 1000;
@@ -64,8 +64,6 @@ export default function AppUpdateNotice() {
     <>
       <a
         href={apkUrl}
-        target="_blank"
-        rel="noreferrer"
         className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-darkBg shadow-xl hover:opacity-90"
         aria-label="Download Monthly Split Android APK"
       >
